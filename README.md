@@ -25,6 +25,16 @@ EntraScope is a **zero-dependency PowerShell toolkit** with a modern GUI that te
 
 Unlike compliance audit tools that check policy settings, EntraScope **actively tests** — it attempts the attacks and shows you whether your controls stop them.
 
+### Screenshots
+
+*(Replace these placeholders with your actual screenshots after taking them)*
+
+![EntraScope Main Dashboard](docs/assets/dashboard.png)  
+*Modern dark-mode WPF GUI powered by WebView2.*
+
+![EntraScope Scan Results](docs/assets/results.png)  
+*Detailed test results showing attack techniques and remediation advice.*
+
 ---
 
 ## Features
