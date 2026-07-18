@@ -1,0 +1,30 @@
+# EntraScope — files and folders to exclude from git
+# Run: git init, then git add ., git commit
+
+# ── Sensitive data — NEVER commit these ──────────────────────────────────────
+config/scope.json          # contains tenant domain, honeypot UPNs — user-specific
+config/*.json              # any other local config files
+
+# ── Generated output ──────────────────────────────────────────────────────────
+reports/                   # scan reports contain tenant data
+logs/                      # any local log files
+
+# ── WebView2 binary DLLs — too large for git, users run setup script ──────────
+gui/wpf/lib/*.dll
+gui/wpf/lib/wv2.zip
+gui/wpf/lib/wv2_tmp/
+gui/wpf/lib/webview2_extract/
+
+# ── PowerShell / Windows artifacts ───────────────────────────────────────────
+*.ps1xml
+Thumbs.db
+Desktop.ini
+
+# ── Editor noise ─────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*~
+
+# ── OS noise ─────────────────────────────────────────────────────────────────
+.DS_Store

@@ -1,0 +1,27 @@
+{
+  "_comment": "Copy this file to scope.json and fill in your details. scope.json is gitignored.",
+  "TenantDomain": "yourcompany.onmicrosoft.com",
+  "TenantId": "",
+  "HoneypotAccounts": [
+    {
+      "UPN": "honeypot01@yourcompany.onmicrosoft.com",
+      "Purpose": "CredentialAttackTesting"
+    },
+    {
+      "UPN": "honeypot02@yourcompany.onmicrosoft.com",
+      "Purpose": "CredentialAttackTesting"
+    }
+  ],
+  "TestAccount": {
+    "UPN": "svc-pentest-lowpriv@yourcompany.onmicrosoft.com"
+  },
+  "AzureSubscriptions": {
+    "AutoDiscover": true,
+    "SpecificSubscriptionIds": []
+  },
+  "Options": {
+    "RateLimitMs": 2000,
+    "CleanupAfterTest": true,
+    "LogLevel": "Verbose"
+  }
+}

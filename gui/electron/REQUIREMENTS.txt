@@ -1,0 +1,133 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# EntraScope GUI — Electron Option
+# Requirements and Dependency Reference
+# ─────────────────────────────────────────────────────────────────────────────
+
+## SYSTEM PREREQUISITES
+# ─────────────────────────────────────────────────────────────────────────────
+
+Node.js         >= 20.0.0 LTS     https://nodejs.org/en/download
+npm             >= 10.0.0         (bundled with Node.js)
+PowerShell      >= 7.0            https://aka.ms/powershell
+Windows         10/11             (for build + run)
+Python          >= 3.11           Required ONLY to compile node-pty native module
+                                  https://www.python.org/downloads/windows/
+Visual Studio Build Tools         Required ONLY to compile node-pty native module
+  (C++ workload)                  https://visualstudio.microsoft.com/downloads/
+                                  → select "Desktop development with C++"
+
+## RUNTIME DEPENDENCIES  (shipped inside the app)
+# ─────────────────────────────────────────────────────────────────────────────
+
+electron-store  ^8.2.0   Persistent settings storage (saves scope.json path,
+                          window size, last run options, recent tenants)
+
+node-pty        ^1.0.0   Pseudo-terminal for PowerShell — enables real-time
+                          streaming of PS output into the GUI terminal panel.
+                          NATIVE MODULE — requires Python + MSVC to build.
+
+xterm           ^5.3.0   Terminal emulator rendered in the GUI window.
+                          Displays live PS7 output with ANSI colour support.
+
+xterm-addon-fit ^0.8.0   Addon: auto-resizes the terminal to the panel size.
+
+chart.js        ^4.4.3   Renders the security score donut chart, phase bar
+                          charts, and pass/fail/warn breakdowns on the dashboard.
+
+marked          ^12.0.0  Markdown → HTML renderer. Used to render the README
+                          and remediation text inline in the GUI.
+
+chokidar        ^3.6.0   File watcher. Detects when a new report JSON appears
+                          in the reports/ directory and auto-loads it into
+                          the dashboard without requiring a manual refresh.
+
+ps-list         ^8.1.1   Lists running processes to detect if a PowerShell
+                          scan is already in progress before launching another.
+
+
+## DEV / BUILD DEPENDENCIES  (not shipped — build time only)
+# ─────────────────────────────────────────────────────────────────────────────
+
+electron        ^31.0.0  The Electron shell itself (Chromium + Node.js runtime).
+                          Pinned to v31 LTS for stability.
+
+electron-builder ^24.13.3 Packages the app into NSIS installer (.exe) and
+                           portable executable for distribution.
+
+cross-env       ^7.0.3   Sets NODE_ENV across Windows/Mac/Linux in npm scripts.
+
+eslint          ^9.5.0   JavaScript linting.
+
+rimraf          ^5.0.7   Cross-platform rm -rf for the clean script.
+
+
+## WHY THESE CHOICES
+# ─────────────────────────────────────────────────────────────────────────────
+
+node-pty vs child_process.spawn:
+  node-pty creates a real PTY (pseudo-terminal), which means PowerShell
+  outputs ANSI escape codes, progress bars, and interactive prompts correctly.
+  child_process.spawn would strip colours and buffer output until the process
+  exits — you'd get no live streaming.
+
+xterm vs a plain <pre> element:
+  xterm handles ANSI/VT100 escape codes from PowerShell output correctly.
+  It renders the EntraScope coloured log lines (cyan/green/yellow/red) exactly
+  as they look in a real terminal.
+
+electron-store vs localStorage:
+  Persists config across app restarts. localStorage is cleared when the app
+  is rebuilt; electron-store writes to %APPDATA%\EntraScope\config.json.
+
+chart.js vs D3.js:
+  Chart.js requires ~200 lines of config. D3.js would require ~800+ lines
+  for the same charts. Chart.js is sufficient for the score/phase visuals.
+
+
+## INSTALL COMMANDS
+# ─────────────────────────────────────────────────────────────────────────────
+
+# 1. Install Node.js LTS from https://nodejs.org then verify:
+node --version    # must be >= 20
+npm --version     # must be >= 10
+
+# 2. Install Windows build tools (for node-pty native compilation)
+npm install --global windows-build-tools
+# OR open Visual Studio Installer → Modify → Desktop development with C++
+
+# 3. Install dependencies
+cd EntraScope\gui\electron
+npm install
+
+# 4. Start in dev mode
+npm run dev
+
+# 5. Build distributable installer
+npm run build
+# Output: EntraScope\gui\electron\dist\EntraScope-Setup-1.0.0.exe
+#         EntraScope\gui\electron\dist\EntraScope-1.0.0-portable.exe
+
+
+## DISK SPACE ESTIMATES
+# ─────────────────────────────────────────────────────────────────────────────
+
+node_modules/           ~350 MB  (dev + runtime deps including Electron)
+dist/ NSIS installer    ~80 MB   (Chromium bundled)
+dist/ portable exe      ~85 MB
+
+
+## TROUBLESHOOTING NODE-PTY BUILD ERRORS
+# ─────────────────────────────────────────────────────────────────────────────
+
+Error: "gyp ERR! find Python"
+  → Install Python 3.x from python.org, add to PATH, then retry npm install
+
+Error: "MSBuild not found"
+  → Install Visual Studio Build Tools with C++ workload (see above)
+
+Error: "node-pty failed to load"
+  → Run: npm rebuild node-pty
+  → Or: npm install --build-from-source node-pty
+
+After Electron version upgrade:
+  → Run: npm run rebuild   (rebuilds native modules against new Electron ABI)

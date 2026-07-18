@@ -1,0 +1,61 @@
+{
+  "_comment": "EntraScope Scope Configuration - Fill in before running. Never commit this file to source control.",
+  "TenantId": "",
+  "TenantDomain": "contoso.com",
+  "AdditionalDomains": [],
+
+  "Authentication": {
+    "Method": "Interactive",
+    "_comment_method": "Interactive | ServicePrincipal",
+    "ServicePrincipalClientId": "",
+    "ServicePrincipalClientSecret": "",
+    "_comment_sp": "If Method=ServicePrincipal, fill in ClientId and Secret of an App Registration with appropriate permissions"
+  },
+
+  "HoneypotAccounts": [
+    {
+      "_comment": "Dedicated test accounts ONLY - never real user accounts",
+      "UPN": "honeypot1@contoso.com",
+      "WrongPassword": "WrongPassword-ForTesting-Only!",
+      "Purpose": "CredentialAttackTesting"
+    }
+  ],
+
+  "TestAccount": {
+    "UPN": "entrascope-test@contoso.com",
+    "_comment": "Low-privilege account for PrivEsc and lateral movement testing"
+  },
+
+  "TestServicePrincipal": {
+    "ClientId": "",
+    "ClientSecret": "",
+    "_comment": "Optionally pre-created low-priv SP for OAuth tests"
+  },
+
+  "AzureSubscriptions": {
+    "AutoDiscover": true,
+    "SpecificSubscriptionIds": []
+  },
+
+  "HybridEntraConnect": {
+    "Enabled": false,
+    "ADConnectServerFQDN": "",
+    "SyncAccountUPN": ""
+  },
+
+  "Options": {
+    "DryRun": false,
+    "RateLimitMs": 2000,
+    "LogLevel": "Verbose",
+    "_comment_loglevel": "Verbose | Normal | Quiet",
+    "CleanupAfterTest": true,
+    "PhasesToRun": ["All"],
+    "_comment_phases": "All, or array of phase names: Phase1,Phase2,...Phase8",
+    "OutputPath": ".\\reports",
+    "ExportJson": true,
+    "ExportHtml": true
+  },
+
+  "KnownUserListFile": "",
+  "_comment_userlist": "Optional path to a newline-delimited list of UPNs to test enumeration against. Leave blank to only test a few generated patterns."
+}

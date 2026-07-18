@@ -1,0 +1,110 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# EntraScope GUI — PowerShell + WPF Option
+# Requirements Reference
+# ─────────────────────────────────────────────────────────────────────────────
+
+## SYSTEM PREREQUISITES
+# ─────────────────────────────────────────────────────────────────────────────
+
+PowerShell      >= 7.0        https://aka.ms/powershell
+                               Required for PS7 features used in EntraScope modules.
+                               WPF GUI also works on Windows PS 5.1 but EntraScope
+                               itself requires PS7. Run with: pwsh (not powershell).
+
+.NET Runtime    >= 7.0        https://dotnet.microsoft.com/download
+                               WPF requires a .NET runtime on Windows.
+                               Windows 10/11 ships with .NET Framework 4.x, but
+                               PowerShell 7 brings its own .NET 7+ runtime which
+                               includes WPF assemblies on Windows.
+
+Windows         10/11         WPF is Windows-only. Will NOT run on macOS or Linux.
+                               (This option is specifically for Windows-only deployment)
+
+Execution Policy RemoteSigned  Set with:
+                               Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
+
+
+## BUILT-IN ASSEMBLIES USED  (no install required — part of .NET/Windows)
+# ─────────────────────────────────────────────────────────────────────────────
+
+PresentationFramework    Core WPF assembly — windows, panels, controls, binding
+PresentationCore         WPF rendering engine
+WindowsBase              WPF base types (DependencyObject, DispatcherObject)
+System.Xaml              XAML parser — loads the GUI layout from .xaml string
+System.Windows.Forms     File/folder picker dialogs (OpenFileDialog, FolderBrowserDialog)
+System.Web               HtmlEncode for safe rendering of test results in WebBrowser
+System.Drawing           Icon loading
+
+
+## OPTIONAL PS MODULE  (recommended but not required)
+# ─────────────────────────────────────────────────────────────────────────────
+
+MSAL.PS         Latest       Install-Module MSAL.PS -Scope CurrentUser
+                              Enables interactive browser pop-up login from the GUI.
+                              Without it, the GUI uses Device Code auth (terminal prompt).
+
+
+## INSTALL STEPS
+# ─────────────────────────────────────────────────────────────────────────────
+
+# 1. Install PowerShell 7 (if not already installed)
+winget install --id Microsoft.PowerShell -e
+
+# 2. Set execution policy
+Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
+
+# 3. Optionally install MSAL.PS for browser auth
+Install-Module MSAL.PS -Scope CurrentUser
+
+# 4. Verify requirements
+pwsh -File .\Check-Requirements.ps1
+
+# 5. Launch the GUI
+pwsh -File .\EntraScopeGUI.ps1
+
+
+## DISK SPACE ESTIMATES
+# ─────────────────────────────────────────────────────────────────────────────
+
+EntraScopeGUI.ps1       ~50-100 KB   (single script, no node_modules, no venv)
+No additional storage required.
+
+
+## ADVANTAGES OVER OTHER OPTIONS
+# ─────────────────────────────────────────────────────────────────────────────
+
+- Zero new runtimes or package managers needed
+- Runs immediately on any Windows machine with PS7
+- PowerShell functions are called directly in-process (no subprocess pipes)
+- Access to all $script: variables and result objects natively
+- Easiest to modify — everything is PowerShell + XAML strings
+- Smallest footprint by far
+
+
+## LIMITATIONS vs OTHER OPTIONS
+# ─────────────────────────────────────────────────────────────────────────────
+
+- XAML UI is more verbose to write than HTML/CSS
+- Dark theming requires manual style definitions in XAML ResourceDictionary
+- No npm ecosystem / no chart.js / charts require custom XAML or WPF DrawingContext
+- Cannot run on macOS or Linux (WPF is Windows-only)
+- Less visually polished than Electron by default
+
+
+## TROUBLESHOOTING
+# ─────────────────────────────────────────────────────────────────────────────
+
+"Add-Type : Could not load file or assembly PresentationFramework"
+  → You are running in a non-Windows environment or a container without WPF.
+    Use Electron or Python option instead.
+
+"This script cannot be loaded because running scripts is disabled"
+  → Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
+
+GUI window opens but is blank / black
+  → The WPF Dispatcher may not be running on the correct STA thread.
+    Always launch with: pwsh -STA -File .\EntraScopeGUI.ps1
+
+"Exception calling 'ShowDialog' with '0' arguments"
+  → Ensure script runs in STA (Single Thread Apartment) mode:
+    Add [STAThread] attribute or launch with pwsh -STA

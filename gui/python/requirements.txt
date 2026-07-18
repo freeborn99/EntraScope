@@ -1,0 +1,111 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# EntraScope GUI — Python + CustomTkinter Option
+# Requirements and Setup Reference
+# ─────────────────────────────────────────────────────────────────────────────
+
+## SYSTEM PREREQUISITES
+# ─────────────────────────────────────────────────────────────────────────────
+
+Python          >= 3.11.0     https://www.python.org/downloads/windows/
+                               ✅ Check "Add Python to PATH" during install
+pip             >= 24.0       Bundled with Python — upgrade with:
+                               python -m pip install --upgrade pip
+PowerShell      >= 7.0        https://aka.ms/powershell
+Windows         10/11         tkinter is Windows-only in practice
+Tcl/Tk          >= 8.6        Bundled with the Python Windows installer
+                               (do NOT use Windows Store Python — no Tcl/Tk)
+
+
+## RUNTIME DEPENDENCIES  (all pure Python — no C++ compiler needed)
+# ─────────────────────────────────────────────────────────────────────────────
+
+customtkinter   5.2.2    Modern dark-mode tkinter. Rounded widgets, proper
+                          dark theme, no native look — consistent appearance
+                          across Windows versions.
+
+CTkTable        1.1.0    Scrollable data grid for customtkinter. Renders the
+                          49-test results table with sortable columns.
+
+Pillow          10.4.0   Image library required by customtkinter for icon
+                          rendering and any image assets.
+
+pywin32         306      Windows API. Real-time subprocess stdout streaming
+                          (avoids the blocking pipe read issue in tkinter).
+
+psutil          6.0.0    Process management. Used to kill the PowerShell scan
+                          process cleanly when the user clicks Cancel.
+
+plotly          5.22.0   Generates interactive chart HTML (donut, bar, pie)
+                          written to a temp file and opened in the system browser
+                          or embedded in a webview widget.
+
+jinja2          3.1.4    HTML report templating.
+
+jsonschema      4.22.0   Validates scope.json before launch — catches missing
+                          fields and wrong types with friendly error messages.
+
+
+## OPTIONAL DEPENDENCY
+# ─────────────────────────────────────────────────────────────────────────────
+
+pywebview       5.1.0    Embeds an Edge WebView2 browser pane inside the app
+                          to render the HTML report without opening a browser.
+                          Requires: Microsoft Edge WebView2 Runtime
+                          Download: https://developer.microsoft.com/microsoft-edge/webview2/
+                          Install: pip install pywebview
+                          NOTE: Only uncomment in requirements.txt if you want
+                          the inline report viewer panel.
+
+
+## INSTALL STEPS
+# ─────────────────────────────────────────────────────────────────────────────
+
+# 1. Verify Python version
+python --version        # must be 3.11+
+python -m pip --version # must be 24+
+
+# 2. Create and activate a virtual environment (strongly recommended)
+cd EntraScope\gui\python
+python -m venv venv
+venv\Scripts\Activate.ps1      # PowerShell
+# or: venv\Scripts\activate.bat  # cmd
+
+# 3. Install dependencies
+pip install -r requirements.txt
+
+# 4. Run the GUI
+python app.py
+
+# 5. Optional: Build a standalone executable with PyInstaller
+pip install pyinstaller
+pyinstaller --onefile --windowed --icon=assets\icon.ico --name=EntraScope app.py
+# Output: dist\EntraScope.exe  (~30-50 MB, no Python install required on target)
+
+
+## DISK SPACE ESTIMATES
+# ─────────────────────────────────────────────────────────────────────────────
+
+venv/                  ~120 MB  (Python + all packages)
+PyInstaller dist/       ~45 MB  (standalone exe)
+
+
+## TROUBLESHOOTING
+# ─────────────────────────────────────────────────────────────────────────────
+
+"No module named tkinter"
+  → Do NOT use Windows Store Python. Download from python.org — the installer
+    includes Tcl/Tk. Reinstall and check "tcl/tk and IDLE" in optional features.
+
+"cannot import name 'CTk' from 'customtkinter'"
+  → Version mismatch. Run: pip install customtkinter==5.2.2 --force-reinstall
+
+"DLL load failed for pywin32"
+  → Run: python Scripts\pywin32_postinstall.py -install  (in your venv)
+
+"plotly charts not showing in tkinter"
+  → plotly generates HTML files opened in the system browser. This is expected.
+    For inline charts, uncomment pywebview in requirements.txt and install it.
+
+Virtual environment won't activate (PowerShell execution policy)
+  → Run: Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
+  → Then retry: venv\Scripts\Activate.ps1
