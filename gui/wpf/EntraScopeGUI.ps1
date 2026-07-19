@@ -95,7 +95,6 @@ function Start-Scan([object]$params) {
     $dryRun     = [bool]($params.dryRun)
     $clientId   = if ($params.clientId)   { $params.clientId }    else { "" }
     $clientSec  = if ($params.clientSecret){ $params.clientSecret } else { "" }
-    $autoProv   = [bool]($params.autoProvision)
 
     $rs = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspace()
     $rs.ApartmentState = "MTA"
@@ -107,7 +106,7 @@ function Start-Scan([object]$params) {
     $rs.SessionStateProxy.SetVariable("dryRun",     $dryRun)
     $rs.SessionStateProxy.SetVariable("clientId",   $clientId)
     $rs.SessionStateProxy.SetVariable("clientSec",  $clientSec)
-    $rs.SessionStateProxy.SetVariable("autoProvision", $autoProv)
+    $rs.SessionStateProxy.SetVariable("existingToken", $script:AccessToken)
 
     $ps = [powershell]::Create()
     $ps.Runspace = $rs
@@ -142,7 +141,7 @@ function Start-Scan([object]$params) {
                 }
             }
             $script:DryRun      = $dryRun
-            $script:AccessToken = $null
+            $script:AccessToken = $existingToken
             $script:AzToken     = $null
 
             $moduleMap = @{
@@ -175,74 +174,40 @@ function Start-Scan([object]$params) {
                         Write-EntraLog "TenantId: $tid" Success
                     } catch { Write-EntraLog "TenantId discovery failed: $($_.Exception.Message)" Warn }
                 }
-                switch ($authMethod) {
-                    "None" {
-                        Write-EntraLog "Recon-only mode — skipping authentication" Warn
-                    }
-                    "DeviceCode" {
-                        $dcBody = @{ client_id="04b07795-8ddb-461a-bbee-02f9e1bf7b46"
-                                     scope="https://graph.microsoft.com/.default offline_access" }
-                        $dcResp = Invoke-RestMethod "https://login.microsoftonline.com/$tid/oauth2/v2.0/devicecode" `
-                            -Method POST -Body $dcBody -ContentType "application/x-www-form-urlencoded" -TimeoutSec 15
-                        $sync.LogQueue.Enqueue("AUTH_CODE`t$($dcResp.user_code)`t$($dcResp.verification_uri)")
-                        $deadline = (Get-Date).AddSeconds($dcResp.expires_in)
-                        while ((Get-Date) -lt $deadline -and -not $sync.Cancel) {
-                            Start-Sleep 5
+                if ($script:AccessToken) {
+                    Write-EntraLog "Using existing session from setup..." Info
+                } else {
+                    switch ($authMethod) {
+                        "None" {
+                            Write-EntraLog "Recon-only mode — skipping authentication" Warn
+                        }
+                        "DeviceCode" {
                             try {
-                                $tb = @{ grant_type="urn:ietf:params:oauth:grant-type:device_code"
-                                         device_code=$dcResp.device_code
-                                         client_id="04b07795-8ddb-461a-bbee-02f9e1bf7b46" }
-                                $tok = Invoke-RestMethod "https://login.microsoftonline.com/$tid/oauth2/v2.0/token" `
-                                    -Method POST -Body $tb -ContentType "application/x-www-form-urlencoded" -TimeoutSec 10
-                                $script:AccessToken = $tok.access_token
-                                Write-EntraLog "Authentication successful" Success
-                                break
-                            } catch {
-                                $e = $null; try { $e = $_.ErrorDetails.Message | ConvertFrom-Json } catch {}
-                                if ($e.error -ne "authorization_pending") { throw }
-                            }
-                        }
-                    }
-                    "ServicePrincipal" {
-                        if ($clientId -and $clientSec) {
-                            $body = @{ grant_type="client_credentials"; client_id=$clientId
-                                       client_secret=$clientSec; scope="https://graph.microsoft.com/.default" }
-                            $tok  = Invoke-RestMethod "https://login.microsoftonline.com/$tid/oauth2/v2.0/token" `
-                                -Method POST -Body $body -ContentType "application/x-www-form-urlencoded" -TimeoutSec 15
-                            $script:AccessToken = $tok.access_token
-                            Write-EntraLog "Service Principal auth successful" Success
-                        }
-                    }
-                    default {
-                        # Interactive browser auth can't work from a background runspace.
-                        # Use Device Code flow instead — the GUI will display the code + URL.
-                        Write-EntraLog "Interactive mode: using Device Code flow for GUI auth..." Info
-                        try {
-                            $dcBody = @{ client_id="04b07795-8ddb-461a-bbee-02f9e1bf7b46"
-                                         scope="https://graph.microsoft.com/.default offline_access" }
-                            $dcResp = Invoke-RestMethod "https://login.microsoftonline.com/$tid/oauth2/v2.0/devicecode" `
-                                -Method POST -Body $dcBody -ContentType "application/x-www-form-urlencoded" -TimeoutSec 15
-                            Write-EntraLog "Device code: $($dcResp.user_code) — open $($dcResp.verification_uri)" Attack
-                            $sync.LogQueue.Enqueue("AUTH_CODE`t$($dcResp.user_code)`t$($dcResp.verification_uri)")
-                            $deadline = (Get-Date).AddSeconds($dcResp.expires_in)
-                            while ((Get-Date) -lt $deadline -and -not $sync.Cancel) {
-                                Start-Sleep 5
-                                try {
-                                    $tb = @{ grant_type="urn:ietf:params:oauth:grant-type:device_code"
-                                             device_code=$dcResp.device_code
-                                             client_id="04b07795-8ddb-461a-bbee-02f9e1bf7b46" }
-                                    $tok = Invoke-RestMethod "https://login.microsoftonline.com/$tid/oauth2/v2.0/token" `
-                                        -Method POST -Body $tb -ContentType "application/x-www-form-urlencoded" -TimeoutSec 10
-                                    $script:AccessToken = $tok.access_token
-                                    Write-EntraLog "Authentication successful" Success
-                                    break
-                                } catch {
-                                    $e = $null; try { $e = $_.ErrorDetails.Message | ConvertFrom-Json } catch {}
-                                    if ($e.error -ne "authorization_pending") { throw }
+                                $dcBody = @{ client_id="04b07795-8ddb-461a-bbee-02f9e1bf7b46"
+                                             scope="https://graph.microsoft.com/.default offline_access" }
+                                $dcResp = Invoke-RestMethod "https://login.microsoftonline.com/$tid/oauth2/v2.0/devicecode" `
+                                    -Method POST -Body $dcBody -ContentType "application/x-www-form-urlencoded" -TimeoutSec 15
+                                $sync.LogQueue.Enqueue("AUTH_CODE`t$($dcResp.user_code)`t$($dcResp.verification_uri)")
+                                $deadline = (Get-Date).AddSeconds($dcResp.expires_in)
+                                while ((Get-Date) -lt $deadline -and -not $sync.Cancel) {
+                                    Start-Sleep 5
+                                    try {
+                                        $tb = @{ grant_type="urn:ietf:params:oauth:grant-type:device_code"
+                                                 device_code=$dcResp.device_code
+                                                 client_id="04b07795-8ddb-461a-bbee-02f9e1bf7b46" }
+                                        $tok = Invoke-RestMethod "https://login.microsoftonline.com/$tid/oauth2/v2.0/token" `
+                                            -Method POST -Body $tb -ContentType "application/x-www-form-urlencoded" -TimeoutSec 10
+                                        $script:AccessToken = $tok.access_token
+                                        Write-EntraLog "Authentication successful" Success
+                                        break
+                                    } catch {
+                                        $e = $null; try { $e = $_.ErrorDetails.Message | ConvertFrom-Json } catch {}
+                                        if ($e.error -ne "authorization_pending") { throw }
+                                    }
                                 }
+                            } catch {
+                                Write-EntraLog ("Auth failed: " + $_.Exception.Message) Error
                             }
-                        } catch {
-                            Write-EntraLog ("Auth failed: " + $_.Exception.Message) Error
                         }
                     }
                 }
@@ -283,27 +248,6 @@ function Start-Scan([object]$params) {
                 }
             } else {
                 Write-EntraLog "DRY RUN — no live API calls" Warn
-            }
-
-            if ($autoProvision -and -not $dryRun -and $authMethod -ne "None") {
-                Write-EntraLog "▶ Auto-provisioning Test Environment..." Attack
-                $setupModule = Join-Path $Root "modules\SetupTestEnvironment.ps1"
-                if (Test-Path $setupModule) { 
-                    . $setupModule 
-                    try {
-                        $setupRes = New-EntraScopeTestEnvironment
-                        if ($setupRes.Success) {
-                            Write-EntraLog "Test environment provisioned successfully" Success
-                            $sync.LogQueue.Enqueue("SETUP_DONE`t" + ($setupRes | ConvertTo-Json -Depth 10 -Compress))
-                        } else {
-                            Write-EntraLog "Test environment setup failed: $($setupRes.Message)" Error
-                        }
-                    } catch {
-                        Write-EntraLog "Test environment setup error: $($_.Exception.Message)" Error
-                    }
-                } else {
-                    Write-EntraLog "modules\SetupTestEnvironment.ps1 not found — skipping auto-provision" Warn
-                }
             }
 
             $total = @($phases).Count; $i = 0
@@ -392,6 +336,68 @@ function Handle-Message([string]$raw) {
         "clearLog" { Send-Page (@{ type="clearLog" } | ConvertTo-Json -Compress) }
         "getReports" {
             Send-Page (@{ type="reportList"; data=@(Get-ReportList) } | ConvertTo-Json -Depth 5 -Compress)
+        }
+        "setupEnv" {
+            $rs = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspace()
+            $rs.ApartmentState = "MTA"; $rs.Open()
+            $rs.SessionStateProxy.SetVariable("sync", $script:sync)
+            $rs.SessionStateProxy.SetVariable("Root", $Root)
+            $rs.SessionStateProxy.SetVariable("existingToken", $script:AccessToken)
+            $ps = [powershell]::Create(); $ps.Runspace = $rs
+            $null = $ps.AddScript({
+                try {
+                    function Write-EntraLog { param([string]$Message,[string]$Level="Info"); $sync.LogQueue.Enqueue("$Level`t$Message") }
+                    $cfgPath = Join-Path $Root "config\scope.json"
+                    if (Test-Path $cfgPath) { $script:Config = Get-Content $cfgPath -Raw | ConvertFrom-Json }
+                    $tid = $script:Config.TenantId
+                    if (-not $tid -and $script:Config.TenantDomain) {
+                        try {
+                            $oidc = Invoke-RestMethod ("https://login.microsoftonline.com/" + $script:Config.TenantDomain + "/.well-known/openid-configuration") -TimeoutSec 10
+                            $tid = $oidc.issuer -replace ".*/([0-9a-f-]{36})/.*",'$1'
+                            $script:Config.TenantId = $tid
+                        } catch {}
+                    }
+                    if (-not $tid) { throw "Could not resolve Tenant ID. Please check Tenant Domain in Config." }
+                    
+                    $script:AccessToken = $existingToken
+                    if (-not $script:AccessToken) {
+                        Write-EntraLog "Authenticating for setup (requires Global Admin)..." Info
+                        $dcBody = @{ client_id="04b07795-8ddb-461a-bbee-02f9e1bf7b46"; scope="https://graph.microsoft.com/.default offline_access" }
+                        $dcResp = Invoke-RestMethod ("https://login.microsoftonline.com/" + $tid + "/oauth2/v2.0/devicecode") -Method POST -Body $dcBody -ContentType "application/x-www-form-urlencoded" -TimeoutSec 15
+                        Write-EntraLog ("Setup auth code: " + $dcResp.user_code + " - open " + $dcResp.verification_uri) Attack
+                        $sync.LogQueue.Enqueue("AUTH_CODE`t$($dcResp.user_code)`t$($dcResp.verification_uri)")
+                        $deadline = (Get-Date).AddSeconds($dcResp.expires_in)
+                        while ((Get-Date) -lt $deadline -and -not $sync.Cancel) {
+                            Start-Sleep 5
+                            try {
+                                $tb = @{ grant_type="urn:ietf:params:oauth:grant-type:device_code"; device_code=$dcResp.device_code; client_id="04b07795-8ddb-461a-bbee-02f9e1bf7b46" }
+                                $tok = Invoke-RestMethod ("https://login.microsoftonline.com/" + $tid + "/oauth2/v2.0/token") -Method POST -Body $tb -ContentType "application/x-www-form-urlencoded" -TimeoutSec 10
+                                $script:AccessToken = $tok.access_token
+                                $sync.LogQueue.Enqueue("SAVE_TOKEN`t" + $tok.access_token)
+                                Write-EntraLog "Authentication successful" Success
+                                break
+                            } catch {
+                                $e = $null; try { $e = $_.ErrorDetails.Message | ConvertFrom-Json } catch {}
+                                if ($e.error -ne "authorization_pending") { throw }
+                            }
+                        }
+                        if (-not $script:AccessToken) { throw "Authentication timed out" }
+                    } else {
+                        Write-EntraLog "Reusing existing session for setup..." Info
+                    }
+
+                    $setupModule = Join-Path $Root "modules\SetupTestEnvironment.ps1"
+                    if (Test-Path $setupModule) { . $setupModule }
+                    $result = New-EntraScopeTestEnvironment
+                    $sync.LogQueue.Enqueue("SETUP_DONE`t" + ($result | ConvertTo-Json -Depth 10 -Compress))
+                } catch {
+                    $sync.LogQueue.Enqueue("SETUP_DONE`t" + (@{ Success=$false; Message=$_.Exception.Message } | ConvertTo-Json -Compress))
+                }
+            })
+            $null = $ps.BeginInvoke()
+            Send-Page (@{ type="toast"; message="Setup starting... check log"; kind="success" } | ConvertTo-Json -Compress)
+            if ($script:drainTimer) { $script:drainTimer.Stop() }
+            $script:drainTimer = Start-DrainTimer
         }
         "cleanupEnv" {
             $rs = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspace()
@@ -482,6 +488,8 @@ function Start-DrainTimer {
                         $script:webView.CoreWebView2.PostWebMessageAsJson(
                             (@{ type="setupResult"; data=($jsonStr | ConvertFrom-Json) } | ConvertTo-Json -Depth 10 -Compress))
                     }
+                } elseif ($line.StartsWith("SAVE_TOKEN`t")) {
+                    $script:AccessToken = $line.Substring(11)
                 } elseif ($line.StartsWith("CLEANUP_DONE`t")) {
                     $jsonStr = $line.Substring(13)
                     if ($script:webView -and $script:webView.CoreWebView2) {
@@ -811,6 +819,40 @@ input[type=checkbox]{accent-color:var(--ac);width:15px;height:15px;cursor:pointe
         </div>
       </div>
 
+      <!-- SETUP CARD -->
+      <div class="card" id="c-setup">
+        <div class="card-hd">🛠 Test Environment Setup</div>
+        <div style="font-size:0.85rem;color:var(--dim);margin-bottom:12px">
+          EntraScope can automatically provision honeypot accounts and a test application in your tenant.
+          You will need to authenticate as a Global Administrator.
+        </div>
+        <div id="setup-status" style="margin-bottom:10px"></div>
+        <div class="bgrp" style="justify-content:flex-start">
+          <button class="btn btn-p" id="setup-btn" onclick="requestSetup()">⚡ Auto-Provision Test Objects</button>
+          <button class="btn btn-d" id="cleanup-btn" onclick="requestCleanup()" style="display:none">🗑 Remove Test Objects</button>
+        </div>
+      </div>
+
+      <!-- SETUP CONFIRMATION MODAL -->
+      <div id="setup-modal" class="modal-overlay" style="display:none">
+        <div class="modal-box">
+          <div class="modal-hd">⚡ Auto-Provision Test Environment</div>
+          <div class="modal-body">
+            <div style="margin-bottom:12px;color:var(--dim);font-size:.85rem">
+              EntraScope will create the following objects in your tenant:
+            </div>
+            <div id="setup-preview" class="setup-list"></div>
+            <div style="margin-top:12px;color:var(--dim);font-size:.85rem">
+              This requires a <b>Global Administrator</b> account to complete.
+            </div>
+          </div>
+          <div class="modal-foot">
+            <button class="btn btn-p" onclick="approveSetup()">✔️ Proceed with Setup</button>
+            <button class="btn btn-g" onclick="closeModal('setup-modal')">❌ Cancel</button>
+          </div>
+        </div>
+      </div>
+
       <!-- CLEANUP CONFIRMATION MODAL -->
       <div id="cleanup-modal" class="modal-overlay" style="display:none">
         <div class="modal-box">
@@ -861,10 +903,6 @@ input[type=checkbox]{accent-color:var(--ac);width:15px;height:15px;cursor:pointe
           </label>
         </div>
         <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--bdr)">
-          <label class="trow">
-            <input type="checkbox" id="r-setup" checked/>
-            <span style="font-size:.83rem">Auto-provision Test Environment (Requires Global Admin)</span>
-          </label>
         </div>
       </div>
       <div class="acbox" id="acbox">
@@ -1006,8 +1044,8 @@ function startScan(){
     const phases=PH.filter(p=>document.getElementById('pc'+p.n)?.querySelector('input')?.checked).map(p=>p.n);
     if(!phases.length){toast('Select at least one phase','tw');return}
     ps({action:'startScan',phases,authMethod:G.auth,dryRun:document.getElementById('r-dry').checked,
-        clientId:document.getElementById('r-cid').value,clientSecret:document.getElementById('r-sec').value,
-        autoProvision:document.getElementById('r-setup').checked});
+        clientId:document.getElementById('r-cid').value,
+        clientSecret:document.getElementById('r-sec').value});
   } catch (e) {
     toast('JS Error: ' + e.message, 'te');
   }
