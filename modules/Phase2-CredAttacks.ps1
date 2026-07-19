@@ -70,9 +70,9 @@ function Invoke-CRED01-SmartLockoutThreshold {
                 Write-EntraLog "    [+] LOCKOUT TRIGGERED at attempt $i (AADSTS50053)" -Level Success
                 break
             } elseif ($aadsts -eq "AADSTS50126") {
-                Write-EntraLog "    Attempt $i: Invalid credentials (AADSTS50126) - account reached auth, ROPC not blocked by CA" -Level Info
+                Write-EntraLog "    Attempt ${i}: Invalid credentials (AADSTS50126) - account reached auth, ROPC not blocked by CA" -Level Info
             } elseif ($aadsts -eq "AADSTS53003") {
-                Write-EntraLog "    Attempt $i: Blocked by Conditional Access (AADSTS53003) - ROPC blocked" -Level Success
+                Write-EntraLog "    Attempt ${i}: Blocked by Conditional Access (AADSTS53003) - ROPC blocked" -Level Success
                 $lockedOut = $true  # CA blocked = effectively blocked
                 break
             }
