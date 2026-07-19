@@ -867,52 +867,6 @@ input[type=checkbox]{accent-color:var(--ac);width:15px;height:15px;cursor:pointe
           </div>
         </div>
       </div>
-      <div class="bgrp">
-        <button class="btn btn-p" onclick="saveCfg()">💾 Save Configuration</button>
-        <button class="btn btn-g" onclick="ps({action:'pickConfigFile'})">📂 Load from File</button>
-      </div>
-    </div>
-
-    <!-- RUN SCAN -->
-    <div class="view" id="v-run">
-      <div class="card">
-        <div class="card-hd">Authentication Method</div>
-        <div class="asel">
-          <div class="abtn on" id="a-int" onclick="selAuth('Interactive')">🔐 Sign In (Device Code)<br><small>Opens browser to authenticate</small></div>
-          <div class="abtn" id="a-sp"  onclick="selAuth('ServicePrincipal')">🔑 Service Principal<br><small>Client ID + Secret</small></div>
-          <div class="abtn" id="a-dev" onclick="selAuth('None')">🔍 Recon Only<br><small>No authentication</small></div>
-        </div>
-        <div class="spf" id="spf">
-          <div class="g2">
-            <div class="fg"><label>Client ID</label><input id="r-cid" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"/></div>
-            <div class="fg"><label>Client Secret</label><input id="r-sec" type="password" placeholder="your-secret"/></div>
-          </div>
-        </div>
-      </div>
-      <div class="card">
-        <div class="card-hd">Phases to Run</div>
-        <div class="pgrid" id="pgrid"></div>
-        <div class="bgrp">
-          <button class="btn btn-g btn-s" onclick="allP(true)">Select All</button>
-          <button class="btn btn-g btn-s" onclick="allP(false)">Deselect All</button>
-          <label class="trow" style="margin-left:auto">
-            <input type="checkbox" id="r-dry"/>
-            <span style="font-size:.83rem">Dry Run (no live API calls)</span>
-          </label>
-        </div>
-      </div>
-      <div class="acbox" id="acbox">
-        <div style="color:var(--ok);font-weight:700;margin-bottom:4px">🔐 Sign in required</div>
-        <div style="font-size:.83rem;color:var(--dim)">Go to <span class="url" id="acurl"></span> and enter:</div>
-        <span class="code" id="accode">XXXXXXXX</span>
-        <div style="font-size:.73rem;color:var(--dim)">Waiting for authentication...</div>
-      </div>
-      <div id="prog-sec" style="display:none">
-        <div class="pwrap"><div class="pbar" id="pbar"></div></div>
-        <div class="plbl" id="plbl">Initialising...</div>
-      </div>
-      <button class="runbtn" id="runbtn" onclick="startScan()">▶  RUN SCAN</button>
-      <button class="btn btn-d" id="canbtn" style="display:none;width:100%;margin-bottom:12px" onclick="cancelScan()">⏹  Cancel Scan</button>
 
       <!-- TEST ENVIRONMENT SETUP -->
       <div class="card" id="setup-card">
@@ -967,6 +921,54 @@ input[type=checkbox]{accent-color:var(--ac);width:15px;height:15px;cursor:pointe
           </div>
         </div>
       </div>
+      <div class="bgrp">
+        <button class="btn btn-p" onclick="saveCfg()">💾 Save Configuration</button>
+        <button class="btn btn-g" onclick="ps({action:'pickConfigFile'})">📂 Load from File</button>
+      </div>
+    </div>
+
+    <!-- RUN SCAN -->
+    <div class="view" id="v-run">
+      <div class="card">
+        <div class="card-hd">Authentication Method</div>
+        <div class="asel">
+          <div class="abtn on" id="a-int" onclick="selAuth('Interactive')">🔐 Sign In (Device Code)<br><small>Opens browser to authenticate</small></div>
+          <div class="abtn" id="a-sp"  onclick="selAuth('ServicePrincipal')">🔑 Service Principal<br><small>Client ID + Secret</small></div>
+          <div class="abtn" id="a-dev" onclick="selAuth('None')">🔍 Recon Only<br><small>No authentication</small></div>
+        </div>
+        <div class="spf" id="spf">
+          <div class="g2">
+            <div class="fg"><label>Client ID</label><input id="r-cid" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"/></div>
+            <div class="fg"><label>Client Secret</label><input id="r-sec" type="password" placeholder="your-secret"/></div>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-hd">Phases to Run</div>
+        <div class="pgrid" id="pgrid"></div>
+        <div class="bgrp">
+          <button class="btn btn-g btn-s" onclick="allP(true)">Select All</button>
+          <button class="btn btn-g btn-s" onclick="allP(false)">Deselect All</button>
+          <label class="trow" style="margin-left:auto">
+            <input type="checkbox" id="r-dry"/>
+            <span style="font-size:.83rem">Dry Run (no live API calls)</span>
+          </label>
+        </div>
+      </div>
+      <div class="acbox" id="acbox">
+        <div style="color:var(--ok);font-weight:700;margin-bottom:4px">🔐 Sign in required</div>
+        <div style="font-size:.83rem;color:var(--dim)">Go to <span class="url" id="acurl"></span> and enter:</div>
+        <span class="code" id="accode">XXXXXXXX</span>
+        <div style="font-size:.73rem;color:var(--dim)">Waiting for authentication...</div>
+      </div>
+      <div id="prog-sec" style="display:none">
+        <div class="pwrap"><div class="pbar" id="pbar"></div></div>
+        <div class="plbl" id="plbl">Initialising...</div>
+      </div>
+      <button class="runbtn" id="runbtn" onclick="startScan()">▶  RUN SCAN</button>
+      <button class="btn btn-d" id="canbtn" style="display:none;width:100%;margin-bottom:12px" onclick="cancelScan()">⏹  Cancel Scan</button>
+
+
       <div class="card" style="padding:12px">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px">
           <div class="card-hd" style="margin-bottom:0">Live Output</div>
