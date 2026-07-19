@@ -181,6 +181,25 @@ function Start-Scan([object]$params) {
                         "None" {
                             Write-EntraLog "Recon-only mode — skipping authentication" Warn
                         }
+                        "Interactive" {
+                            try {
+                                Write-EntraLog "Opening Microsoft Login window..." Info
+                                $sync.AuthPopupClosed = $false
+                                $sync.AccessToken = $null
+                                $sync.RefreshToken = $null
+                                $sync.AuthError = $null
+                                $sync.LogQueue.Enqueue("REQ_INTERACTIVE_AUTH`t$tid")
+                                while (-not $sync.AuthPopupClosed -and -not $sync.Cancel) { Start-Sleep 1 }
+                                if ($sync.AuthError) { throw "Auth failed: $($sync.AuthError)" }
+                                if ($sync.AccessToken) {
+                                    $script:AccessToken = $sync.AccessToken
+                                    Write-EntraLog "Authentication successful" Success
+                                }
+                                if (-not $script:AccessToken) { throw "Authentication cancelled or timed out" }
+                            } catch {
+                                Write-EntraLog ("Auth failed: " + $_.Exception.Message) Error
+                            }
+                        }
                         "DeviceCode" {
                             try {
                                 $dcBody = @{ client_id="04b07795-8ddb-461a-bbee-02f9e1bf7b46"
@@ -214,36 +233,48 @@ function Start-Scan([object]$params) {
 
                 # Acquire ARM token for Azure Resource phases (7/8) if Graph auth succeeded
                 if ($script:AccessToken -and -not $script:AzToken) {
-                    Write-EntraLog "Acquiring Azure Management token..." Info
-                    try {
-                        $armBody = @{ client_id="04b07795-8ddb-461a-bbee-02f9e1bf7b46"
-                                      scope="https://management.azure.com/.default offline_access" }
-                        $armDc = Invoke-RestMethod "https://login.microsoftonline.com/$tid/oauth2/v2.0/devicecode" `
-                            -Method POST -Body $armBody -ContentType "application/x-www-form-urlencoded" -TimeoutSec 15
-                        Write-EntraLog ("ARM device code: " + $armDc.user_code + " — open " + $armDc.verification_uri) Attack
-                        $sync.LogQueue.Enqueue("AUTH_CODE`t$($armDc.user_code)`t$($armDc.verification_uri)")
-                        $armDeadline = (Get-Date).AddSeconds($armDc.expires_in)
-                        while ((Get-Date) -lt $armDeadline -and -not $sync.Cancel) {
-                            Start-Sleep 5
-                            try {
-                                $armTb = @{ grant_type="urn:ietf:params:oauth:grant-type:device_code"
-                                            device_code=$armDc.device_code
-                                            client_id="04b07795-8ddb-461a-bbee-02f9e1bf7b46" }
-                                $armTok = Invoke-RestMethod "https://login.microsoftonline.com/$tid/oauth2/v2.0/token" `
-                                    -Method POST -Body $armTb -ContentType "application/x-www-form-urlencoded" -TimeoutSec 10
-                                $script:AzToken = $armTok.access_token
-                                Write-EntraLog "ARM token acquired" Success
-                                break
-                            } catch {
-                                $armErr = $null; try { $armErr = $_.ErrorDetails.Message | ConvertFrom-Json } catch {}
-                                if ($armErr.error -ne "authorization_pending") {
-                                    Write-EntraLog ("ARM auth skipped: " + $_.Exception.Message) Warn
+                    if ($sync.RefreshToken) {
+                        Write-EntraLog "Acquiring Azure Management token silently..." Info
+                        try {
+                            $armTb = @{ grant_type="refresh_token"; refresh_token=$sync.RefreshToken; client_id="04b07795-8ddb-461a-bbee-02f9e1bf7b46"; scope="https://management.azure.com/.default" }
+                            $armTok = Invoke-RestMethod "https://login.microsoftonline.com/$tid/oauth2/v2.0/token" -Method POST -Body $armTb -ContentType "application/x-www-form-urlencoded" -TimeoutSec 10
+                            $script:AzToken = $armTok.access_token
+                            Write-EntraLog "ARM token acquired" Success
+                        } catch {
+                            Write-EntraLog ("Silent ARM token acquisition failed: " + $_.Exception.Message) Warn
+                        }
+                    } else {
+                        Write-EntraLog "Acquiring Azure Management token (Device Code)..." Info
+                        try {
+                            $armBody = @{ client_id="04b07795-8ddb-461a-bbee-02f9e1bf7b46"
+                                          scope="https://management.azure.com/.default offline_access" }
+                            $armDc = Invoke-RestMethod "https://login.microsoftonline.com/$tid/oauth2/v2.0/devicecode" `
+                                -Method POST -Body $armBody -ContentType "application/x-www-form-urlencoded" -TimeoutSec 15
+                            Write-EntraLog ("ARM device code: " + $armDc.user_code + " — open " + $armDc.verification_uri) Attack
+                            $sync.LogQueue.Enqueue("AUTH_CODE`t$($armDc.user_code)`t$($armDc.verification_uri)")
+                            $armDeadline = (Get-Date).AddSeconds($armDc.expires_in)
+                            while ((Get-Date) -lt $armDeadline -and -not $sync.Cancel) {
+                                Start-Sleep 5
+                                try {
+                                    $armTb = @{ grant_type="urn:ietf:params:oauth:grant-type:device_code"
+                                                device_code=$armDc.device_code
+                                                client_id="04b07795-8ddb-461a-bbee-02f9e1bf7b46" }
+                                    $armTok = Invoke-RestMethod "https://login.microsoftonline.com/$tid/oauth2/v2.0/token" `
+                                        -Method POST -Body $armTb -ContentType "application/x-www-form-urlencoded" -TimeoutSec 10
+                                    $script:AzToken = $armTok.access_token
+                                    Write-EntraLog "ARM token acquired" Success
                                     break
+                                } catch {
+                                    $armErr = $null; try { $armErr = $_.ErrorDetails.Message | ConvertFrom-Json } catch {}
+                                    if ($armErr.error -ne "authorization_pending") {
+                                        Write-EntraLog ("ARM auth skipped: " + $_.Exception.Message) Warn
+                                        break
+                                    }
                                 }
                             }
+                        } catch {
+                            Write-EntraLog ("ARM token skipped: " + $_.Exception.Message) Warn
                         }
-                    } catch {
-                        Write-EntraLog ("ARM token skipped: " + $_.Exception.Message) Warn
                     }
                 }
             } else {
@@ -362,26 +393,19 @@ function Handle-Message([string]$raw) {
                     $script:AccessToken = $existingToken
                     if (-not $script:AccessToken) {
                         Write-EntraLog "Authenticating for setup (requires Global Admin)..." Info
-                        $dcBody = @{ client_id="04b07795-8ddb-461a-bbee-02f9e1bf7b46"; scope="https://graph.microsoft.com/.default offline_access" }
-                        $dcResp = Invoke-RestMethod ("https://login.microsoftonline.com/" + $tid + "/oauth2/v2.0/devicecode") -Method POST -Body $dcBody -ContentType "application/x-www-form-urlencoded" -TimeoutSec 15
-                        Write-EntraLog ("Setup auth code: " + $dcResp.user_code + " - open " + $dcResp.verification_uri) Attack
-                        $sync.LogQueue.Enqueue("AUTH_CODE`t$($dcResp.user_code)`t$($dcResp.verification_uri)")
-                        $deadline = (Get-Date).AddSeconds($dcResp.expires_in)
-                        while ((Get-Date) -lt $deadline -and -not $sync.Cancel) {
-                            Start-Sleep 5
-                            try {
-                                $tb = @{ grant_type="urn:ietf:params:oauth:grant-type:device_code"; device_code=$dcResp.device_code; client_id="04b07795-8ddb-461a-bbee-02f9e1bf7b46" }
-                                $tok = Invoke-RestMethod ("https://login.microsoftonline.com/" + $tid + "/oauth2/v2.0/token") -Method POST -Body $tb -ContentType "application/x-www-form-urlencoded" -TimeoutSec 10
-                                $script:AccessToken = $tok.access_token
-                                $sync.LogQueue.Enqueue("SAVE_TOKEN`t" + $tok.access_token)
-                                Write-EntraLog "Authentication successful" Success
-                                break
-                            } catch {
-                                $e = $null; try { $e = $_.ErrorDetails.Message | ConvertFrom-Json } catch {}
-                                if ($e.error -ne "authorization_pending") { throw }
-                            }
+                        $sync.AuthPopupClosed = $false
+                        $sync.AccessToken = $null
+                        $sync.RefreshToken = $null
+                        $sync.AuthError = $null
+                        $sync.LogQueue.Enqueue("REQ_INTERACTIVE_AUTH`t$tid")
+                        while (-not $sync.AuthPopupClosed -and -not $sync.Cancel) { Start-Sleep 1 }
+                        if ($sync.AuthError) { throw "Auth failed: $($sync.AuthError)" }
+                        if ($sync.AccessToken) {
+                            $script:AccessToken = $sync.AccessToken
+                            $sync.LogQueue.Enqueue("SAVE_TOKEN`t" + $script:AccessToken)
+                            Write-EntraLog "Authentication successful" Success
                         }
-                        if (-not $script:AccessToken) { throw "Authentication timed out" }
+                        if (-not $script:AccessToken) { throw "Authentication cancelled or timed out" }
                     } else {
                         Write-EntraLog "Reusing existing session for setup..." Info
                     }
@@ -496,6 +520,50 @@ function Start-DrainTimer {
                         $script:webView.CoreWebView2.PostWebMessageAsJson(
                             (@{ type="cleanupResult"; data=($jsonStr | ConvertFrom-Json) } | ConvertTo-Json -Depth 10 -Compress))
                     }
+                } elseif ($line.StartsWith("REQ_INTERACTIVE_AUTH`t")) {
+                    $tid = $line.Substring(21)
+                    $authWindow = [System.Windows.Window]::new()
+                    $authWindow.Title = "Microsoft Sign-in"
+                    $authWindow.Width = 500; $authWindow.Height = 700
+                    $authWindow.WindowStartupLocation = [System.Windows.WindowStartupLocation]::CenterOwner
+                    if ($script:window) { $authWindow.Owner = $script:window }
+                    
+                    $authWebView = [Microsoft.Web.WebView2.Wpf.WebView2]::new()
+                    $authWindow.Content = $authWebView
+                    
+                    $authWindow.Add_Loaded({
+                        $null = $authWebView.EnsureCoreWebView2Async($null)
+                        $atimer = [System.Windows.Threading.DispatcherTimer]::new()
+                        $atimer.Interval = [TimeSpan]::FromMilliseconds(100)
+                        $atimer.Add_Tick({
+                            if ($authWebView.CoreWebView2) {
+                                $atimer.Stop()
+                                $authWebView.CoreWebView2.add_NavigationStarting({
+                                    param($sender, $args)
+                                    if ($args.Uri -and ($args.Uri.StartsWith("http://localhost") -or $args.Uri.StartsWith("https://localhost"))) {
+                                        $args.Cancel = $true
+                                        if ($args.Uri -match "code=([^&]+)") {
+                                            $tb = @{ grant_type="authorization_code"; code=$matches[1]; client_id="04b07795-8ddb-461a-bbee-02f9e1bf7b46"; redirect_uri="http://localhost" }
+                                            try {
+                                                $tok = Invoke-RestMethod "https://login.microsoftonline.com/$tid/oauth2/v2.0/token" -Method POST -Body $tb -ContentType "application/x-www-form-urlencoded"
+                                                $sync.AccessToken = $tok.access_token
+                                                $sync.RefreshToken = $tok.refresh_token
+                                                $script:AccessToken = $tok.access_token
+                                            } catch {
+                                                $sync.AuthError = $_.Exception.Message
+                                            }
+                                        }
+                                        $authWindow.Close()
+                                    }
+                                })
+                                $authUrl = "https://login.microsoftonline.com/$tid/oauth2/v2.0/authorize?client_id=04b07795-8ddb-461a-bbee-02f9e1bf7b46&response_type=code&redirect_uri=http://localhost&scope=https://graph.microsoft.com/.default offline_access"
+                                $authWebView.CoreWebView2.Navigate($authUrl)
+                            }
+                        })
+                        $atimer.Start()
+                    })
+                    $authWindow.ShowDialog() | Out-Null
+                    $sync.AuthPopupClosed = $true
                 } elseif ($line.StartsWith("AUTH_CODE`t")) {
                     $p = $line -split "`t"
                     if ($script:webView -and $script:webView.CoreWebView2) {
@@ -880,7 +948,7 @@ input[type=checkbox]{accent-color:var(--ac);width:15px;height:15px;cursor:pointe
       <div class="card">
         <div class="card-hd">Authentication Method</div>
         <div class="asel">
-          <div class="abtn on" id="a-int" onclick="selAuth('Interactive')">🔐 Sign In (Device Code)<br><small>Opens browser to authenticate</small></div>
+          <div class="abtn on" id="a-int" onclick="selAuth('Interactive')">🔐 Sign In (Web Popup)<br><small>Opens a browser window to authenticate</small></div>
           <div class="abtn" id="a-sp"  onclick="selAuth('ServicePrincipal')">🔑 Service Principal<br><small>Client ID + Secret</small></div>
           <div class="abtn" id="a-dev" onclick="selAuth('None')">🔍 Recon Only<br><small>No authentication</small></div>
         </div>
