@@ -31,7 +31,7 @@ Unlike compliance audit tools that check policy settings, EntraScope **actively 
 
 ![EntraScope Main Dashboard](docs/assets/dashboard.png)  
 
-![EntraScope Scan Results](docs/assets/results.png)
+![EntraScope Scan Results](docs/assets/results.jpg)
 
 ---
 
@@ -118,9 +118,10 @@ Click **💾 Save**.
 Honeypot accounts are **dedicated decoy accounts** that credential tests fire bad passwords at. They must exist in your tenant but should never be used by real people.
 
 **Option A: Auto-Provision (Recommended)**
-1. Check the `Auto-provision Test Environment` box on the **Run Scan** tab.
-2. When you run a scan as a Global Admin, EntraScope will automatically create the honeypot accounts and a test app for you.
-3. When the scan finishes, you'll be prompted to automatically remove them.
+1. Go to the **⚙️ Configure** tab.
+2. In the "Test Environment Setup" card, click **⚡ Auto-Provision Test Objects**.
+3. Authenticate as a Global Administrator when prompted via the Device Code flow. EntraScope will automatically create the honeypot accounts and a test app for you.
+4. When you are finished with all your testing, you can click **🗑 Remove Test Objects** to clean up the environment.
 
 **Option B: Manual Setup**
 See **[docs/ACCOUNT-SETUP.md](docs/ACCOUNT-SETUP.md)** for full manual creation instructions.
