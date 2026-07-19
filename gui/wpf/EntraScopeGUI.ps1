@@ -323,6 +323,8 @@ function Handle-Message([string]$raw) {
                 if ($cfg) { Send-Page (@{ type="config"; data=$cfg } | ConvertTo-Json -Depth 10 -Compress) }
                 Send-Page (@{ type="reportList"; data=@(Get-ReportList) } | ConvertTo-Json -Depth 5 -Compress)
                 Send-Page (@{ type="status"; value="Idle"; root=$Root } | ConvertTo-Json -Compress)
+                $mfPath = Join-Path $Root "reports\setup-manifest.json"
+                Send-Page (@{ type="manifestExists"; exists=(Test-Path $mfPath) } | ConvertTo-Json -Compress)
             }
         "saveConfig" {
             try {
@@ -367,6 +369,121 @@ function Handle-Message([string]$raw) {
         "clearLog" { Send-Page (@{ type="clearLog" } | ConvertTo-Json -Compress) }
         "getReports" {
             Send-Page (@{ type="reportList"; data=@(Get-ReportList) } | ConvertTo-Json -Depth 5 -Compress)
+        }
+        "setupEnv" {
+            # Run setup in a background runspace
+            $rs = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspace()
+            $rs.ApartmentState = "MTA"; $rs.Open()
+            $rs.SessionStateProxy.SetVariable("sync", $script:sync)
+            $rs.SessionStateProxy.SetVariable("Root", $Root)
+            $ps = [powershell]::Create(); $ps.Runspace = $rs
+            $null = $ps.AddScript({
+                try {
+                    function Write-EntraLog { param([string]$Message,[string]$Level="Info"); $sync.LogQueue.Enqueue("$Level`t$Message") }
+                    $cfgPath = Join-Path $Root "config\scope.json"
+                    if (Test-Path $cfgPath) { $script:Config = Get-Content $cfgPath -Raw | ConvertFrom-Json }
+                    # Authenticate with device code for setup
+                    $tid = $script:Config.TenantId
+                    if (-not $tid -and $script:Config.TenantDomain) {
+                        try {
+                            $oidc = Invoke-RestMethod ("https://login.microsoftonline.com/" + $script:Config.TenantDomain + "/.well-known/openid-configuration") -TimeoutSec 10
+                            $tid = $oidc.issuer -replace ".*/([0-9a-f-]{36})/.*",'$1'
+                            $script:Config.TenantId = $tid
+                        } catch {}
+                    }
+                    Write-EntraLog "Authenticating for setup (requires Global Admin)..." Info
+                    $dcBody = @{ client_id="04b07795-8ddb-461a-bbee-02f9e1bf7b46"; scope="https://graph.microsoft.com/.default offline_access" }
+                    $dcResp = Invoke-RestMethod ("https://login.microsoftonline.com/" + $tid + "/oauth2/v2.0/devicecode") -Method POST -Body $dcBody -ContentType "application/x-www-form-urlencoded" -TimeoutSec 15
+                    Write-EntraLog ("Setup auth code: " + $dcResp.user_code + " - open " + $dcResp.verification_uri) Attack
+                    $sync.LogQueue.Enqueue("AUTH_CODE`t$($dcResp.user_code)`t$($dcResp.verification_uri)")
+                    $deadline = (Get-Date).AddSeconds($dcResp.expires_in)
+                    while ((Get-Date) -lt $deadline) {
+                        Start-Sleep 5
+                        try {
+                            $tb = @{ grant_type="urn:ietf:params:oauth:grant-type:device_code"; device_code=$dcResp.device_code; client_id="04b07795-8ddb-461a-bbee-02f9e1bf7b46" }
+                            $tok = Invoke-RestMethod ("https://login.microsoftonline.com/" + $tid + "/oauth2/v2.0/token") -Method POST -Body $tb -ContentType "application/x-www-form-urlencoded" -TimeoutSec 10
+                            $script:AccessToken = $tok.access_token
+                            Write-EntraLog "Authentication successful" Success
+                            break
+                        } catch {
+                            $e = $null; try { $e = $_.ErrorDetails.Message | ConvertFrom-Json } catch {}
+                            if ($e.error -ne "authorization_pending") { throw }
+                        }
+                    }
+                    if (-not $script:AccessToken) { throw "Authentication timed out" }
+                    # Load and run setup module
+                    $setupModule = Join-Path $Root "modules\SetupTestEnvironment.ps1"
+                    if (Test-Path $setupModule) { . $setupModule }
+                    $result = New-EntraScopeTestEnvironment
+                    $sync.LogQueue.Enqueue("SETUP_DONE`t" + ($result | ConvertTo-Json -Depth 10 -Compress))
+                } catch {
+                    $sync.LogQueue.Enqueue("SETUP_DONE`t" + (@{ Success=$false; Message=$_.Exception.Message } | ConvertTo-Json -Compress))
+                }
+            })
+            $null = $ps.BeginInvoke()
+            Send-Page (@{ type="toast"; message="Setup starting... check log for auth code"; kind="success" } | ConvertTo-Json -Compress)
+            if ($script:drainTimer) { $script:drainTimer.Stop() }
+            $script:drainTimer = Start-DrainTimer
+        }
+        "cleanupEnv" {
+            $rs = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspace()
+            $rs.ApartmentState = "MTA"; $rs.Open()
+            $rs.SessionStateProxy.SetVariable("sync", $script:sync)
+            $rs.SessionStateProxy.SetVariable("Root", $Root)
+            $ps = [powershell]::Create(); $ps.Runspace = $rs
+            $null = $ps.AddScript({
+                try {
+                    function Write-EntraLog { param([string]$Message,[string]$Level="Info"); $sync.LogQueue.Enqueue("$Level`t$Message") }
+                    $cfgPath = Join-Path $Root "config\scope.json"
+                    if (Test-Path $cfgPath) { $script:Config = Get-Content $cfgPath -Raw | ConvertFrom-Json }
+                    $tid = $script:Config.TenantId
+                    if (-not $tid -and $script:Config.TenantDomain) {
+                        try {
+                            $oidc = Invoke-RestMethod ("https://login.microsoftonline.com/" + $script:Config.TenantDomain + "/.well-known/openid-configuration") -TimeoutSec 10
+                            $tid = $oidc.issuer -replace ".*/([0-9a-f-]{36})/.*",'$1'
+                        } catch {}
+                    }
+                    Write-EntraLog "Authenticating for cleanup..." Info
+                    $dcBody = @{ client_id="04b07795-8ddb-461a-bbee-02f9e1bf7b46"; scope="https://graph.microsoft.com/.default offline_access" }
+                    $dcResp = Invoke-RestMethod ("https://login.microsoftonline.com/" + $tid + "/oauth2/v2.0/devicecode") -Method POST -Body $dcBody -ContentType "application/x-www-form-urlencoded" -TimeoutSec 15
+                    Write-EntraLog ("Cleanup auth code: " + $dcResp.user_code + " - open " + $dcResp.verification_uri) Attack
+                    $sync.LogQueue.Enqueue("AUTH_CODE`t$($dcResp.user_code)`t$($dcResp.verification_uri)")
+                    $deadline = (Get-Date).AddSeconds($dcResp.expires_in)
+                    while ((Get-Date) -lt $deadline) {
+                        Start-Sleep 5
+                        try {
+                            $tb = @{ grant_type="urn:ietf:params:oauth:grant-type:device_code"; device_code=$dcResp.device_code; client_id="04b07795-8ddb-461a-bbee-02f9e1bf7b46" }
+                            $tok = Invoke-RestMethod ("https://login.microsoftonline.com/" + $tid + "/oauth2/v2.0/token") -Method POST -Body $tb -ContentType "application/x-www-form-urlencoded" -TimeoutSec 10
+                            $script:AccessToken = $tok.access_token
+                            Write-EntraLog "Authentication successful" Success
+                            break
+                        } catch {
+                            $e = $null; try { $e = $_.ErrorDetails.Message | ConvertFrom-Json } catch {}
+                            if ($e.error -ne "authorization_pending") { throw }
+                        }
+                    }
+                    if (-not $script:AccessToken) { throw "Authentication timed out" }
+                    $setupModule = Join-Path $Root "modules\SetupTestEnvironment.ps1"
+                    if (Test-Path $setupModule) { . $setupModule }
+                    $result = Remove-EntraScopeTestEnvironment
+                    $sync.LogQueue.Enqueue("CLEANUP_DONE`t" + ($result | ConvertTo-Json -Depth 5 -Compress))
+                } catch {
+                    $sync.LogQueue.Enqueue("CLEANUP_DONE`t" + (@{ Success=$false; Message=$_.Exception.Message } | ConvertTo-Json -Compress))
+                }
+            })
+            $null = $ps.BeginInvoke()
+            Send-Page (@{ type="toast"; message="Cleanup starting... check log for auth code"; kind="success" } | ConvertTo-Json -Compress)
+            if ($script:drainTimer) { $script:drainTimer.Stop() }
+            $script:drainTimer = Start-DrainTimer
+        }
+        "getSetupManifest" {
+            $mf = Join-Path $Root "reports\setup-manifest.json"
+            if (Test-Path $mf) {
+                $data = Get-Content $mf -Raw | ConvertFrom-Json
+                Send-Page (@{ type="manifestForCleanup"; data=$data } | ConvertTo-Json -Depth 10 -Compress)
+            } else {
+                Send-Page (@{ type="toast"; message="No test environment found"; kind="warn" } | ConvertTo-Json -Compress)
+            }
         }
     }
     } catch {
@@ -416,6 +533,18 @@ function Start-DrainTimer {
                         }
                     } catch {}
                     if ($script:drainTimer) { $script:drainTimer.Stop() }
+                } elseif ($line.StartsWith("SETUP_DONE`t")) {
+                    $jsonStr = $line.Substring(11)
+                    if ($script:webView -and $script:webView.CoreWebView2) {
+                        $script:webView.CoreWebView2.PostWebMessageAsJson(
+                            (@{ type="setupResult"; data=($jsonStr | ConvertFrom-Json) } | ConvertTo-Json -Depth 10 -Compress))
+                    }
+                } elseif ($line.StartsWith("CLEANUP_DONE`t")) {
+                    $jsonStr = $line.Substring(13)
+                    if ($script:webView -and $script:webView.CoreWebView2) {
+                        $script:webView.CoreWebView2.PostWebMessageAsJson(
+                            (@{ type="cleanupResult"; data=($jsonStr | ConvertFrom-Json) } | ConvertTo-Json -Depth 10 -Compress))
+                    }
                 } elseif ($line.StartsWith("AUTH_CODE`t")) {
                     $p = $line -split "`t"
                     if ($script:webView -and $script:webView.CoreWebView2) {
@@ -618,6 +747,22 @@ input[type=checkbox]{accent-color:var(--ac);width:15px;height:15px;cursor:pointe
 ::-webkit-scrollbar{width:5px;height:5px}::-webkit-scrollbar-track{background:var(--bg)}
 ::-webkit-scrollbar-thumb{background:var(--bdr);border-radius:4px}
 ::-webkit-scrollbar-thumb:hover{background:#2a4a8e}
+/* Modal */
+.modal-overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.7);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;z-index:999}
+.modal-box{background:var(--c1);border:1px solid var(--bdr);border-radius:12px;width:460px;max-width:90%;max-height:80vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+.modal-hd{padding:16px 20px;font-weight:700;font-size:1.05rem;border-bottom:1px solid var(--bdr)}
+.modal-body{padding:16px 20px}
+.modal-foot{padding:12px 20px;border-top:1px solid var(--bdr);display:flex;gap:8px;justify-content:flex-end}
+.setup-list{display:flex;flex-direction:column;gap:6px}
+.setup-item{display:flex;align-items:center;gap:10px;padding:8px 12px;background:rgba(255,255,255,.03);border:1px solid var(--bdr);border-radius:8px;font-size:.83rem}
+.setup-item .si-icon{font-size:1.1rem;width:24px;text-align:center}
+.setup-item .si-name{color:var(--fg);font-weight:600}
+.setup-item .si-desc{color:var(--dim);font-size:.75rem}
+.setup-pwd{margin-top:12px;padding:10px;background:rgba(0,200,80,.06);border:1px solid rgba(0,200,80,.2);border-radius:8px}
+.setup-pwd .sp-label{font-weight:700;color:var(--ok);font-size:.8rem;margin-bottom:6px}
+.setup-pwd .sp-row{display:flex;justify-content:space-between;font-size:.78rem;padding:2px 0;font-family:'Cascadia Code','Fira Code',monospace}
+.setup-pwd .sp-upn{color:var(--dim)}
+.setup-pwd .sp-pw{color:var(--fg);user-select:all}
 </style></head><body>
 
 <!-- SIDEBAR -->
@@ -768,6 +913,60 @@ input[type=checkbox]{accent-color:var(--ac);width:15px;height:15px;cursor:pointe
       </div>
       <button class="runbtn" id="runbtn" onclick="startScan()">▶  RUN SCAN</button>
       <button class="btn btn-d" id="canbtn" style="display:none;width:100%;margin-bottom:12px" onclick="cancelScan()">⏹  Cancel Scan</button>
+
+      <!-- TEST ENVIRONMENT SETUP -->
+      <div class="card" id="setup-card">
+        <div class="card-hd">🔧 Test Environment</div>
+        <div style="font-size:.83rem;color:var(--dim);margin-bottom:10px">
+          Automatically create honeypot accounts, test users, and app registrations needed for a full scan.
+          Requires <b>Global Administrator</b>.
+        </div>
+        <div id="setup-status"></div>
+        <div class="bgrp">
+          <button class="btn btn-p" id="setup-btn" onclick="requestSetup()">🔧 Setup Test Environment</button>
+          <button class="btn btn-d" id="cleanup-btn" style="display:none" onclick="requestCleanup()">🗑 Remove Test Objects</button>
+        </div>
+      </div>
+
+      <!-- SETUP APPROVAL MODAL -->
+      <div id="setup-modal" class="modal-overlay" style="display:none">
+        <div class="modal-box">
+          <div class="modal-hd">🔧 Test Environment Setup</div>
+          <div class="modal-body">
+            <div style="margin-bottom:12px;color:var(--dim);font-size:.85rem">
+              The following objects will be created in your tenant:
+            </div>
+            <div id="setup-preview" class="setup-list"></div>
+            <div style="margin-top:12px;padding:10px;background:rgba(255,180,0,.08);border-radius:6px;border:1px solid rgba(255,180,0,.2)">
+              <div style="font-weight:700;color:#ffb400;font-size:.85rem">⚠️ Required Permissions</div>
+              <div style="font-size:.8rem;color:var(--dim);margin-top:4px">
+                Global Administrator — or — User Administrator + Application Administrator
+              </div>
+            </div>
+          </div>
+          <div class="modal-foot">
+            <button class="btn btn-p" onclick="approveSetup()">✅ Approve & Create</button>
+            <button class="btn btn-g" onclick="closeModal('setup-modal')">❌ Cancel</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- CLEANUP CONFIRMATION MODAL -->
+      <div id="cleanup-modal" class="modal-overlay" style="display:none">
+        <div class="modal-box">
+          <div class="modal-hd">🧹 Cleanup Test Environment</div>
+          <div class="modal-body">
+            <div style="margin-bottom:12px;color:var(--dim);font-size:.85rem">
+              This will permanently delete all EntraScope test objects from your tenant:
+            </div>
+            <div id="cleanup-preview" class="setup-list"></div>
+          </div>
+          <div class="modal-foot">
+            <button class="btn btn-d" onclick="approveCleanup()">🗑 Remove All</button>
+            <button class="btn btn-g" onclick="closeModal('cleanup-modal')">📋 Keep (Manual Cleanup)</button>
+          </div>
+        </div>
+      </div>
       <div class="card" style="padding:12px">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px">
           <div class="card-hd" style="margin-bottom:0">Live Output</div>
@@ -1032,8 +1231,93 @@ window.chrome.webview.addEventListener('message',ev=>{
       document.getElementById('acbox').classList.add('on'); break;
     case 'authDone': document.getElementById('acbox').classList.remove('on'); break;
     case 'configPath': toast('Config loaded','ti'); break;
+    case 'setupResult': showSetupResult(m.data); break;
+    case 'cleanupResult': showCleanupResult(m.data); break;
+    case 'manifestForCleanup': showManifestForCleanup(m.data); break;
+    case 'manifestExists': checkManifestOnLoad(m.exists); break;
   }
 });
+
+// Test Environment Setup
+function requestSetup(){
+  const dom=document.getElementById('c-dom').value.trim();
+  if(!dom){toast('Set Tenant Domain in Config first','tw');return}
+  const items=[
+    {icon:'👤',name:'entrascope-honeypot1@'+dom,desc:'Honeypot account for credential tests'},
+    {icon:'👤',name:'entrascope-honeypot2@'+dom,desc:'Second honeypot for spray detection'},
+    {icon:'👤',name:'entrascope-testuser@'+dom,desc:'Low-privilege test user for priv-esc tests'},
+    {icon:'📦',name:'EntraScope-TestApp-'+new Date().toISOString().slice(0,10).replace(/-/g,''),desc:'Test app registration for OAuth tests'}
+  ];
+  const el=document.getElementById('setup-preview');
+  el.innerHTML=items.map(i=>`<div class="setup-item"><span class="si-icon">${i.icon}</span><div><div class="si-name">${esc(i.name)}</div><div class="si-desc">${esc(i.desc)}</div></div></div>`).join('');
+  document.getElementById('setup-modal').style.display='flex';
+}
+function approveSetup(){
+  closeModal('setup-modal');
+  document.getElementById('setup-btn').disabled=true;
+  document.getElementById('setup-btn').textContent='⏳ Setting up...';
+  ps({action:'setupEnv'});
+}
+function requestCleanup(){
+  ps({action:'getSetupManifest'});
+}
+function approveCleanup(){
+  closeModal('cleanup-modal');
+  document.getElementById('cleanup-btn').disabled=true;
+  document.getElementById('cleanup-btn').textContent='⏳ Removing...';
+  ps({action:'cleanupEnv'});
+}
+function closeModal(id){document.getElementById(id).style.display='none'}
+function showSetupResult(data){
+  const el=document.getElementById('setup-status');
+  if(data.Success){
+    let html='<div style="color:var(--ok);font-weight:700;margin-bottom:8px">✅ '+esc(data.Message)+'</div>';
+    if(data.Passwords&&data.Passwords.length){
+      html+='<div class="setup-pwd"><div class="sp-label">🔑 Account Passwords (shown once — save these!)</div>';
+      data.Passwords.forEach(p=>{html+='<div class="sp-row"><span class="sp-upn">'+esc(p.UPN||p.upn)+'</span><span class="sp-pw">'+esc(p.Password||p.password)+'</span></div>'});
+      html+='</div>';
+    }
+    el.innerHTML=html;
+    document.getElementById('setup-btn').style.display='none';
+    document.getElementById('cleanup-btn').style.display='';
+    document.getElementById('cleanup-btn').disabled=false;
+    document.getElementById('cleanup-btn').textContent='🗑 Remove Test Objects';
+  } else {
+    el.innerHTML='<div style="color:var(--err);font-weight:700">❌ Setup failed: '+esc(data.Message||'Unknown error')+'</div>';
+    document.getElementById('setup-btn').disabled=false;
+    document.getElementById('setup-btn').textContent='🔧 Setup Test Environment';
+  }
+}
+function showCleanupResult(data){
+  const el=document.getElementById('setup-status');
+  if(data.Success){
+    el.innerHTML='<div style="color:var(--ok);font-weight:700;margin-bottom:4px">✅ Cleanup complete: '+data.Removed+' objects removed</div>';
+    document.getElementById('cleanup-btn').style.display='none';
+    document.getElementById('setup-btn').style.display='';
+    document.getElementById('setup-btn').disabled=false;
+    document.getElementById('setup-btn').textContent='🔧 Setup Test Environment';
+  } else {
+    el.innerHTML='<div style="color:var(--err)">❌ Cleanup error: '+esc(data.Message||'Unknown')+'</div>';
+    document.getElementById('cleanup-btn').disabled=false;
+    document.getElementById('cleanup-btn').textContent='🗑 Remove Test Objects';
+  }
+}
+function showManifestForCleanup(data){
+  if(!data||!data.Objects){toast('No test environment found','tw');return}
+  const el=document.getElementById('cleanup-preview');
+  el.innerHTML=(data.Objects||data.objects||[]).map(o=>{
+    const icon=o.Type==='User'?'👤':'📦';
+    return`<div class="setup-item"><span class="si-icon">${icon}</span><div><div class="si-name">${esc(o.DisplayName||o.displayName)}</div><div class="si-desc">${esc(o.UPN||o.upn||o.Id||o.id)}</div></div></div>`
+  }).join('');
+  document.getElementById('cleanup-modal').style.display='flex';
+}
+function checkManifestOnLoad(exists){
+  if(exists){
+    document.getElementById('setup-btn').style.display='none';
+    document.getElementById('cleanup-btn').style.display='';
+    document.getElementById('setup-status').innerHTML='<div style="color:var(--ok);font-size:.83rem">✅ Test environment is provisioned</div>';
+  }
+}
 
 function ps(obj){window.chrome.webview.postMessage(JSON.stringify(obj))}
 
