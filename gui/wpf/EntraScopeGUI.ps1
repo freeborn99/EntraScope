@@ -539,10 +539,10 @@ function Start-DrainTimer {
                             if ($authWebView.CoreWebView2) {
                                 $atimer.Stop()
                                 $authWebView.CoreWebView2.add_NavigationStarting({
-                                    param($sender, $args)
-                                    if ($args.Uri -and ($args.Uri.StartsWith("http://localhost") -or $args.Uri.StartsWith("https://localhost"))) {
-                                        $args.Cancel = $true
-                                        if ($args.Uri -match "code=([^&]+)") {
+                                    param($sender, $e)
+                                    if ($e.Uri -and ($e.Uri.StartsWith("http://localhost") -or $e.Uri.StartsWith("https://localhost"))) {
+                                        $e.Cancel = $true
+                                        if ($e.Uri -match "code=([^&]+)") {
                                             $tb = @{ grant_type="authorization_code"; code=$matches[1]; client_id="04b07795-8ddb-461a-bbee-02f9e1bf7b46"; redirect_uri="http://localhost" }
                                             try {
                                                 $tok = Invoke-RestMethod "https://login.microsoftonline.com/$tid/oauth2/v2.0/token" -Method POST -Body $tb -ContentType "application/x-www-form-urlencoded"
