@@ -346,7 +346,7 @@ function Start-DrainTimer {
                                 (@{ type="toast"; message="Report saved: $([System.IO.Path]::GetFileName($jp))"; kind="success" } | ConvertTo-Json -Compress))
                         }
                     } catch {}
-                    $t.Stop()
+                    if ($script:drainTimer) { $script:drainTimer.Stop() }
                 } elseif ($line.StartsWith("AUTH_CODE`t")) {
                     $p = $line -split "`t"
                     if ($script:webView -and $script:webView.CoreWebView2) {
