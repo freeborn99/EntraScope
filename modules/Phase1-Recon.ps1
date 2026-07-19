@@ -242,7 +242,7 @@ function Invoke-RECON04-FederationMetadata {
         -Severity $severity -Status $status `
         -Description "Checks if ADFS federation metadata XML is publicly accessible, which exposes server version and configuration." `
         -AttackTechnique "GET common ADFS metadata paths on known subdomains" `
-        -Result (if ($anyExposed) { "Federation metadata endpoint(s) publicly accessible. Exposes ADFS version and token signing certificates." } else { "No accessible federation metadata endpoints found on common subdomains." }) `
+        -Result $(if ($anyExposed) { "Federation metadata endpoint(s) publicly accessible. Exposes ADFS version and token signing certificates." } else { "No accessible federation metadata endpoints found on common subdomains." }) `
         -Evidence ($findings | ConvertTo-Json) `
         -Remediation "Restrict /FederationMetadata access to known IP ranges. Update ADFS servers to latest version. Consider migrating from ADFS to Entra ID native auth." `
         -MSDocsLink "https://learn.microsoft.com/en-us/windows-server/identity/ad-fs/deployment/best-practices-securing-ad-fs" `
@@ -355,7 +355,7 @@ function Invoke-RECON06-DanglingDNS {
         -Severity "High" -Status $status `
         -Description "Checks for Azure subdomains that resolve in DNS but no longer have a backing Azure resource (subdomain takeover risk)." `
         -AttackTechnique "Resolve common Azure subdomains for your org name, probe HTTP - dangling entries can be claimed by attackers" `
-        -Result (if ($dangling.Count -gt 0) { "DANGLING SUBDOMAINS FOUND: $($dangling -join ', '). These may be claimable by an attacker." } else { "No dangling Azure subdomains detected on common patterns." }) `
+        -Result $(if ($dangling.Count -gt 0) { "DANGLING SUBDOMAINS FOUND: $($dangling -join ', '). These may be claimable by an attacker." } else { "No dangling Azure subdomains detected on common patterns." }) `
         -Evidence ($findings | ConvertTo-Json) `
         -Remediation "Remove DNS records for any Azure resources that have been decommissioned. Use Azure Defender for DNS or third-party tools to monitor for dangling DNS." `
         -MSDocsLink "https://learn.microsoft.com/en-us/azure/security/fundamentals/subdomain-takeover" `
@@ -417,7 +417,7 @@ function Invoke-RECON07-PublicBlobStorage {
         -Severity "Critical" -Status $status `
         -Description "Probes common storage account naming patterns for publicly accessible blob containers." `
         -AttackTechnique "GET https://{orgname-variations}.blob.core.windows.net/?comp=list - no credentials needed for public containers" `
-        -Result (if ($publicBlobs.Count -gt 0) { "PUBLIC BLOB CONTAINERS FOUND: $($publicBlobs -join ', ')" } else { "No publicly accessible blob containers found on $($storageNames.Count) naming patterns." }) `
+        -Result $(if ($publicBlobs.Count -gt 0) { "PUBLIC BLOB CONTAINERS FOUND: $($publicBlobs -join ', ')" } else { "No publicly accessible blob containers found on $($storageNames.Count) naming patterns." }) `
         -Evidence ($findings | ConvertTo-Json) `
         -Remediation "Set 'Allow Blob public access' to DISABLED at the storage account level. Use Azure Policy to enforce this across subscriptions." `
         -MSDocsLink "https://learn.microsoft.com/en-us/azure/storage/blobs/anonymous-read-access-prevent" `

@@ -319,7 +319,7 @@ function Invoke-LAT04-KeyVaultAccess {
             -Severity "Critical" -Status $status `
             -Description "Tests whether compromised user credentials can access Azure Key Vault secrets. Key Vaults often contain database passwords, API keys, and certificates enabling further lateral movement." `
             -AttackTechnique "Enumerate Key Vaults via ARM. Attempt secret list/get operations. KV secrets often contain: DB connection strings, storage keys, API credentials for downstream systems." `
-            -Result (if ($accessible.Count -gt 0) { "CRITICAL: $($accessible.Count) Key Vault(s) have accessible secrets! Data plane access confirmed." } else { "Key Vault access denied for all probed vaults. RBAC controls in place." }) `
+            -Result $(if ($accessible.Count -gt 0) { "CRITICAL: $($accessible.Count) Key Vault(s) have accessible secrets! Data plane access confirmed." } else { "Key Vault access denied for all probed vaults. RBAC controls in place." }) `
             -Evidence ($evidence | ConvertTo-Json -Depth 3) `
             -Remediation "1) Use Azure RBAC for Key Vault (not legacy vault access policies). 2) Grant minimum permissions - prefer Key Vault Reader not Key Vault Secrets Officer for most users. 3) Enable Key Vault firewall to restrict to known IPs/VNets. 4) Enable audit logging for all secret access." `
             -MSDocsLink "https://learn.microsoft.com/en-us/azure/key-vault/general/rbac-guide" `
@@ -406,7 +406,7 @@ function Invoke-LAT05-StorageSASAbuse {
             -Severity "Critical" -Status $status `
             -Description "Checks for publicly accessible Azure Blob containers and storage accounts with insecure configurations (public access, HTTP, shared key auth)." `
             -AttackTechnique "1) Public containers: no auth needed for data exfiltration. 2) Shared key enabled: if key is discovered (e.g. in code), full storage access. 3) HTTP: credentials transmitted in plaintext." `
-            -Result (if ($anyPublic) { "CRITICAL: $($publicFindings.Count) publicly accessible storage container(s) found!" } elseif ($anyRisky) { "WARNING: $($evidence['RiskyStorageAccounts'].Count) storage accounts have insecure configurations." } else { "No public or insecure storage accounts detected." }) `
+            -Result $(if ($anyPublic) { "CRITICAL: $($publicFindings.Count) publicly accessible storage container(s) found!" } elseif ($anyRisky) { "WARNING: $($evidence['RiskyStorageAccounts'].Count) storage accounts have insecure configurations." } else { "No public or insecure storage accounts detected." }) `
             -Evidence ($evidence | ConvertTo-Json -Depth 4) `
             -Remediation "1) Set 'Allow Blob public access' to FALSE on all storage accounts. 2) Enable 'Secure transfer required' (HTTPS only). 3) Set minimum TLS to 1.2. 4) Consider disabling Shared Key access and using Azure AD auth exclusively. 5) Apply Azure Policy to enforce these settings." `
             -MSDocsLink "https://learn.microsoft.com/en-us/azure/storage/blobs/anonymous-read-access-prevent" `

@@ -79,7 +79,7 @@ function Invoke-OAUTH01-DeviceCodeFlowBlock {
         -Severity "Critical" -Status $status `
         -Description "Tests whether Conditional Access blocks the Device Code OAuth flow. This flow is abused in 'Device Code Phishing' - attacker generates a code and tricks a user into entering it at microsoft.com/devicelogin, receiving a token without knowing the user's password." `
         -AttackTechnique "POST /oauth2/v2.0/devicecode with well-known public client IDs. Receive device_code + user_code. Social engineer victim to enter code at microsoft.com/devicelogin. Bypass MFA." `
-        -Result (if ($anySucceeded) { "DEVICE CODE FLOW NOT BLOCKED. Codes issued for: $($testClients | Where-Object {$evidence[$_.Name].Status -eq 'FLOW_ALLOWED'} | Select-Object -ExpandProperty Name) - Device code phishing attack is POSSIBLE." } else { "Device code flow BLOCKED by Conditional Access for all tested client IDs." }) `
+        -Result $(if ($anySucceeded) { "DEVICE CODE FLOW NOT BLOCKED. Codes issued for: $($testClients | Where-Object {$evidence[$_.Name].Status -eq 'FLOW_ALLOWED'} | Select-Object -ExpandProperty Name) - Device code phishing attack is POSSIBLE." } else { "Device code flow BLOCKED by Conditional Access for all tested client IDs." }) `
         -Evidence ($evidence | ConvertTo-Json -Depth 4) `
         -Remediation "Create a Conditional Access policy: Users=All, Cloud Apps=All, Conditions=Authentication Flows (Device code flow), Access control=Block. This will prevent device code phishing." `
         -MSDocsLink "https://learn.microsoft.com/en-us/azure/active-directory/conditional-access/how-to-policy-authentication-flows" `
@@ -156,7 +156,7 @@ function Invoke-OAUTH02-UserConsentCheck {
             -Severity "Critical" -Status $status `
             -Description "Checks if users can consent to OAuth applications themselves. Illicit consent grant attack: attacker registers app with Mail.Read, tricks user into consenting, gains persistent access even after password resets." `
             -AttackTechnique "Register app with high-privilege scopes. Craft OAuth consent URL. Social engineer user to click. User consent = attacker gets refresh token that survives password changes." `
-            -Result (if ($issues.Count -gt 0) { "CONSENT ISSUES FOUND: $($issues -join '; ')" } else { "User consent is properly restricted. Admin approval required for app permissions." }) `
+            -Result $(if ($issues.Count -gt 0) { "CONSENT ISSUES FOUND: $($issues -join '; ')" } else { "User consent is properly restricted. Admin approval required for app permissions." }) `
             -Evidence ($evidence | ConvertTo-Json -Depth 4) `
             -Remediation "1) Set user consent to 'Do not allow user consent' (most secure) or 'Allow user consent for apps from verified publishers for selected permissions'. 2) Enable Admin consent request workflow so users can request access." `
             -MSDocsLink "https://learn.microsoft.com/en-us/azure/active-directory/manage-apps/configure-user-consent" `
@@ -288,7 +288,7 @@ function Invoke-OAUTH04-RefreshTokenLifetime {
             -Severity "High" -Status $status `
             -Description "Reviews token lifetime and session policies. Stolen refresh tokens remain valid for up to 90 days if no sign-in frequency policy enforces re-authentication." `
             -AttackTechnique "Steal refresh token (via AiTM phishing, malware, or browser cookie theft). Replay token for up to 90 days - survives password changes." `
-            -Result (if ($issues.Count -gt 0) { "TOKEN LIFETIME ISSUES: $($issues -join '; ')" } else { "Session and token lifetime policies configured appropriately." }) `
+            -Result $(if ($issues.Count -gt 0) { "TOKEN LIFETIME ISSUES: $($issues -join '; ')" } else { "Session and token lifetime policies configured appropriately." }) `
             -Evidence ($evidence | ConvertTo-Json -Depth 5) `
             -Remediation "1) Create CA policy with Sign-in frequency set to 1-4 hours for privileged roles, 8 hours for all users. 2) Set Persistent browser session to 'Never persistent' for sensitive apps. 3) Enable Continuous Access Evaluation." `
             -MSDocsLink "https://learn.microsoft.com/en-us/azure/active-directory/conditional-access/howto-conditional-access-session-lifetime" `
@@ -364,7 +364,7 @@ function Invoke-OAUTH05-CAETokenRevocation {
             -Severity "High" -Status $status `
             -Description "Verifies Continuous Access Evaluation (CAE) is configured. Without CAE, a stolen access token remains valid for up to 1 hour even after the account is disabled or the session is revoked." `
             -AttackTechnique "Steal access token. Even if victim changes password, token works for ~60 minutes unless CAE revokes it in near-real-time." `
-            -Result (if ($issues.Count -gt 0) { "CAE GAPS: $($issues -join '; ')" } else { "CAE policies found with appropriate coverage." }) `
+            -Result $(if ($issues.Count -gt 0) { "CAE GAPS: $($issues -join '; ')" } else { "CAE policies found with appropriate coverage." }) `
             -Evidence ($evidence | ConvertTo-Json -Depth 5) `
             -Remediation "Enable CAE in Conditional Access session controls. Set mode to 'strict' for critical apps and privileged users. This enables near-real-time revocation of stolen tokens." `
             -MSDocsLink "https://learn.microsoft.com/en-us/azure/active-directory/conditional-access/concept-continuous-access-evaluation" `
@@ -436,7 +436,7 @@ function Invoke-OAUTH06-ServicePrincipalCABypass {
             -Severity "High" -Status $status `
             -Description "Checks if Conditional Access policies apply to service principals (workload identities). Most CA policies target human users only - SPs authenticating with client secrets bypass them entirely." `
             -AttackTechnique "Steal/discover a service principal's client secret or certificate. Authenticate as SP via /token. Bypass all user-targeting CA policies since SPs are excluded." `
-            -Result (if ($issues.Count -gt 0) { "SP CA BYPASS RISK: $($issues -join '; ')" } else { "Workload identity CA policies in place." }) `
+            -Result $(if ($issues.Count -gt 0) { "SP CA BYPASS RISK: $($issues -join '; ')" } else { "Workload identity CA policies in place." }) `
             -Evidence ($evidence | ConvertTo-Json -Depth 4) `
             -Remediation "Requires Entra Workload Identities Premium license. Create CA policies targeting workload identities with conditions (IP ranges, etc). Regularly rotate SP credentials and monitor via Workload Identity risk detections." `
             -MSDocsLink "https://learn.microsoft.com/en-us/azure/active-directory/conditional-access/workload-identity" `

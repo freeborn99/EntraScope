@@ -179,7 +179,7 @@ function Invoke-CRED02-LowSlowSprayDetection {
         -Severity "Critical" -Status $status `
         -Description "Performs a classic low-and-slow password spray (1 attempt per account) to verify Identity Protection detects the pattern." `
         -AttackTechnique "One common password attempt per honeypot account spread across accounts - evades per-account lockout" `
-        -Result (if ($riskDetected) { "Identity Protection DETECTED the spray pattern. Risk events generated." } else { "Spray performed. Identity Protection detection not confirmed - may require Entra ID P2 license or spray volume was too small." }) `
+        -Result $(if ($riskDetected) { "Identity Protection DETECTED the spray pattern. Risk events generated." } else { "Spray performed. Identity Protection detection not confirmed - may require Entra ID P2 license or spray volume was too small." }) `
         -Evidence (@{ SprayAttempts = $sprayResults; RiskDetection = $riskEvidence } | ConvertTo-Json -Depth 4) `
         -Remediation "Enable Entra ID P2 for Identity Protection password spray detection. Configure user risk policy to block or require MFA on High risk. Enable Sign-in risk policy." `
         -MSDocsLink "https://learn.microsoft.com/en-us/azure/active-directory/identity-protection/howto-identity-protection-configure-risk-policies" `
@@ -264,7 +264,7 @@ function Invoke-CRED03-LegacyAuthSMTP {
             -Severity "Critical" -Status $status `
             -Description "Tests whether SMTP Basic AUTH is enabled, which bypasses MFA and Conditional Access." `
             -AttackTechnique "TCP connect to smtp.office365.com:587, send EHLO + AUTH LOGIN - if server accepts, legacy auth is enabled" `
-            -Result (if ($authAllowed) { "SMTP AUTH LOGIN accepted! Legacy authentication is enabled - bypasses MFA and CA." } else { "SMTP AUTH rejected or requires STARTTLS + modern auth. Legacy auth appears blocked." }) `
+            -Result $(if ($authAllowed) { "SMTP AUTH LOGIN accepted! Legacy authentication is enabled - bypasses MFA and CA." } else { "SMTP AUTH rejected or requires STARTTLS + modern auth. Legacy auth appears blocked." }) `
             -Evidence ($evidence | ConvertTo-Json) `
             -Remediation "Create Conditional Access policy blocking Legacy Authentication clients. In Exchange Online PowerShell: Set-TransportConfig -SmtpClientAuthenticationDisabled $true for tenants not using SMTP relay." `
             -MSDocsLink "https://learn.microsoft.com/en-us/azure/active-directory/conditional-access/block-legacy-authentication" `
@@ -353,7 +353,7 @@ function Invoke-CRED04-LegacyAuthIMAP {
             -Severity "Critical" -Status $status `
             -Description "Tests whether IMAP Basic AUTH is accessible on Exchange Online, which bypasses MFA and Conditional Access." `
             -AttackTechnique "IMAP SSL connect to outlook.office365.com:993, attempt LOGIN - bypasses MFA if successful" `
-            -Result (if ($status -eq "PASS") { "IMAP auth rejected (AUTHENTICATIONFAILED or disabled). Legacy IMAP auth blocked." } else { "IMAP LOGIN reached credential validation. Legacy auth may be enabled for this protocol." }) `
+            -Result $(if ($status -eq "PASS") { "IMAP auth rejected (AUTHENTICATIONFAILED or disabled). Legacy IMAP auth blocked." } else { "IMAP LOGIN reached credential validation. Legacy auth may be enabled for this protocol." }) `
             -Evidence ($evidence | ConvertTo-Json) `
             -Remediation "Block IMAP in Conditional Access using 'Exchange ActiveSync clients' and 'Other clients' conditions. Run: Set-CASMailbox -Identity * -ImapEnabled $false in Exchange Online PS." `
             -MSDocsLink "https://learn.microsoft.com/en-us/exchange/clients-and-mobile-in-exchange-online/client-access-rules/client-access-rules" `
@@ -443,7 +443,7 @@ function Invoke-CRED05-ROPCFlowTest {
         -Severity "Critical" -Status $status `
         -Description "Tests if the ROPC OAuth flow is blocked by Conditional Access. ROPC accepts username+password directly, bypassing MFA and interactive auth flows." `
         -AttackTechnique "POST /oauth2/v2.0/token grant_type=password with known public client IDs (Azure CLI, PowerShell, Office) - standard attacker tool IDs" `
-        -Result (if ($status -eq "PASS") { "ROPC flow blocked by Conditional Access or tenant policy for all tested client IDs." } else { "ROPC FLOW REACHES CREDENTIAL VALIDATION. MFA and CA policies may be bypassable via ROPC with valid credentials." }) `
+        -Result $(if ($status -eq "PASS") { "ROPC flow blocked by Conditional Access or tenant policy for all tested client IDs." } else { "ROPC FLOW REACHES CREDENTIAL VALIDATION. MFA and CA policies may be bypassable via ROPC with valid credentials." }) `
         -Evidence ($evidence | ConvertTo-Json) `
         -Remediation "Create a Conditional Access policy: Conditions > Client apps > check 'Mobile apps and desktop clients', then under Access controls > Block. Alternatively use Authentication Strengths requiring phishing-resistant MFA." `
         -MSDocsLink "https://learn.microsoft.com/en-us/azure/active-directory/develop/v2-oauth-ropc" `
@@ -513,7 +513,7 @@ function Invoke-CRED06-MFAPushFatigue {
             -Severity "High" -Status $status `
             -Description "Assesses whether MFA configuration is vulnerable to push notification fatigue attacks (attackers repeatedly sending push requests until user accidentally approves)." `
             -AttackTechnique "If MFA is push-only without number matching: repeatedly trigger MFA prompts until victim approves. Works with valid credential + compromised password." `
-            -Result (if ($issues.Count -gt 0) { "MFA FATIGUE VULNERABILITIES: $($issues -join '; ')" } else { "MFA configuration appears resilient to fatigue attacks. Number matching and/or phishing-resistant MFA enabled." }) `
+            -Result $(if ($issues.Count -gt 0) { "MFA FATIGUE VULNERABILITIES: $($issues -join '; ')" } else { "MFA configuration appears resilient to fatigue attacks. Number matching and/or phishing-resistant MFA enabled." }) `
             -Evidence ($evidence | ConvertTo-Json) `
             -Remediation "1) Enable number matching in Microsoft Authenticator. 2) Enable 'Additional context' (app name + location). 3) Enable FIDO2/Windows Hello for Business. 4) Disable SMS and Voice MFA methods." `
             -MSDocsLink "https://learn.microsoft.com/en-us/azure/active-directory/authentication/how-to-mfa-number-match" `

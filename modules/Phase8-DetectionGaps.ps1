@@ -63,7 +63,7 @@ function Invoke-DETECT01-DiagnosticSettings {
         -Severity "Critical" -Status $status `
         -Description "Verifies that sign-in logs, audit logs, and Azure activity logs are flowing to a SIEM (Log Analytics/Sentinel). Without this, attacks are invisible." `
         -AttackTechnique "An attacker benefits if diagnostic settings are missing - no sign-in logs in Sentinel means spray attacks, token abuse, and persistence are never alerted on." `
-        -Result (if ($issues.Count -gt 0) { "DETECTION GAPS: $($issues -join '; ')" } else { "Diagnostic settings configured and logs flowing to monitoring workspace." }) `
+        -Result $(if ($issues.Count -gt 0) { "DETECTION GAPS: $($issues -join '; ')" } else { "Diagnostic settings configured and logs flowing to monitoring workspace." }) `
         -Evidence ($evidence | ConvertTo-Json -Depth 5) `
         -Remediation "1) Configure Entra diagnostic settings to forward All logs to Log Analytics workspace. 2) Enable activity log export for each subscription. 3) Enable Microsoft Defender XDR connector in Sentinel. 4) Verify data ingestion in LA workspace." `
         -MSDocsLink "https://learn.microsoft.com/en-us/azure/active-directory/reports-monitoring/howto-integrate-activity-logs-with-log-analytics" `

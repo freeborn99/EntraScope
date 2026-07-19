@@ -196,7 +196,7 @@ function Invoke-PERSIST02-SPCredentialAddition {
             -Severity "High" -Status $status `
             -Description "Simulates adding credentials to an existing service principal as a persistence mechanism. Attacker adds their own secret to a high-privilege SP - invisible to the SP's normal secret rotation." `
             -AttackTechnique "POST /servicePrincipals/{existingHighPrivSP}/addPassword. Attacker now authenticates as that SP. This survives password resets, MFA changes, and is hard to detect." `
-            -Result (if ($detected) { "SP credential addition detected in audit log. Ensure your SIEM alerts on 'Add service principal credentials' events." } else { "AUDIT GAP: SP credential addition NOT found in audit log within test window." }) `
+            -Result $(if ($detected) { "SP credential addition detected in audit log. Ensure your SIEM alerts on 'Add service principal credentials' events." } else { "AUDIT GAP: SP credential addition NOT found in audit log within test window." }) `
             -Evidence ($evidence | ConvertTo-Json -Depth 4) `
             -Remediation "1) Alert on 'Add service principal credentials' and 'Add application password credential' in audit logs. 2) Review SP credentials regularly - unexpected secrets are a red flag. 3) Disable unused SPs." `
             -MSDocsLink "https://learn.microsoft.com/en-us/azure/active-directory/fundamentals/security-operations-applications" `
@@ -470,7 +470,7 @@ function Invoke-PERSIST05-GuestBackdoor {
             -Severity "High" -Status $status `
             -Description "Tests whether an authenticated user can invite external accounts as guests without restriction." `
             -AttackTechnique "POST /invitations with external email - if blocked = guest invitation controls working" `
-            -Result (if ($status -eq "PASS") { "Guest invitation BLOCKED (HTTP $code). External collaboration controls working. Policy: allowInvitesFrom=$($evidence['AllowInvitesFrom'])" } else { "Error: $($_.Exception.Message)" }) `
+            -Result $(if ($status -eq "PASS") { "Guest invitation BLOCKED (HTTP $code). External collaboration controls working. Policy: allowInvitesFrom=$($evidence['AllowInvitesFrom'])" } else { "Error: $($_.Exception.Message)" }) `
             -Evidence ($evidence | ConvertTo-Json) `
             -Remediation "Good if blocked. Verify 'allowInvitesFrom' is set to 'adminsAndGuestInviters' or 'admins' only." `
             -MSDocsLink "https://learn.microsoft.com/en-us/azure/active-directory/external-identities/external-collaboration-settings-configure" `

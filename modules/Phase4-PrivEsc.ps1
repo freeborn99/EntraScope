@@ -89,7 +89,7 @@ function Invoke-PRIVESC01-SelfRoleAssignment {
             -Severity "Critical" -Status $status `
             -Description "Tests whether a non-admin user can assign privileged roles to themselves via the Graph API." `
             -AttackTechnique "POST /roleManagement/directory/roleAssignments to add Global Admin role to current user" `
-            -Result (if ($status -eq "PASS") { "BLOCKED (HTTP $code) - Role self-assignment correctly denied." } else { "Error: $($_.Exception.Message)" }) `
+            -Result $(if ($status -eq "PASS") { "BLOCKED (HTTP $code) - Role self-assignment correctly denied." } else { "Error: $($_.Exception.Message)" }) `
             -Evidence (@{ HTTPCode = $code; Error = $_.Exception.Message } | ConvertTo-Json) `
             -Remediation "No action needed if PASS. Regularly audit role assignment permissions." `
             -MSDocsLink "https://learn.microsoft.com/en-us/azure/active-directory/roles/assign-roles-different-scopes" `
@@ -178,7 +178,7 @@ function Invoke-PRIVESC02-ServicePrincipalOwnerAbuse {
             -Severity "Critical" -Status $status `
             -Description "Tests if an owned service principal can have credentials added to it, enabling authentication as that SP to abuse its permissions." `
             -AttackTechnique "POST /servicePrincipals/{id}/addPassword - if SP has dangerous permissions, this = privilege escalation" `
-            -Result (if ($anySucceeded) { "CREDENTIAL ADDED TO OWNED SP(S)! If those SPs have privileged permissions, this is a privilege escalation path. Credentials were cleaned up." } else { "Could not add credentials to owned SPs, or current user owns no SPs." }) `
+            -Result $(if ($anySucceeded) { "CREDENTIAL ADDED TO OWNED SP(S)! If those SPs have privileged permissions, this is a privilege escalation path. Credentials were cleaned up." } else { "Could not add credentials to owned SPs, or current user owns no SPs." }) `
             -Evidence ($evidence | ConvertTo-Json -Depth 4) `
             -Remediation "Audit all SP ownerships. Remove test/dev accounts from owning production SPs. For sensitive SPs, use Azure AD Privileged Access to control who can modify them." `
             -MSDocsLink "https://learn.microsoft.com/en-us/azure/active-directory/manage-apps/overview-assign-app-owners" `
@@ -253,7 +253,7 @@ function Invoke-PRIVESC03-GroupMembershipManipulation {
             -Severity "High" -Status $status `
             -Description "Tests whether an authenticated user can add themselves to privileged groups, inheriting group permissions and role assignments." `
             -AttackTechnique "POST /groups/{privilegedGroupId}/members/`$ref with current user ID - if group has privileged role assignments, immediate privilege escalation" `
-            -Result (if ($anyAdded) { "PRIVILEGE ESCALATION: Successfully added to privileged group(s). Group membership was cleaned up." } else { "$($privGroups.value.Count) privileged groups found. None could be joined by current user." }) `
+            -Result $(if ($anyAdded) { "PRIVILEGE ESCALATION: Successfully added to privileged group(s). Group membership was cleaned up." } else { "$($privGroups.value.Count) privileged groups found. None could be joined by current user." }) `
             -Evidence ($evidence | ConvertTo-Json -Depth 3) `
             -Remediation "Enable group membership control via Microsoft Entra ID Governance. Set role-assignable groups to require owner approval for membership. Use PIM for Groups for JIT membership." `
             -MSDocsLink "https://learn.microsoft.com/en-us/azure/active-directory/privileged-identity-management/groups-features" `
@@ -341,7 +341,7 @@ function Invoke-PRIVESC04-PIMActivationTest {
             -Severity "High" -Status $status `
             -Description "Checks if PIM role activation requires MFA and Authentication Context. Without these, a stolen session token can activate privileged roles." `
             -AttackTechnique "Steal user session token via AiTM. Use existing session to activate PIM role if MFA is not re-enforced at activation time - get Global Admin with stolen session." `
-            -Result (if ($pimIssues.Count -gt 0) { "PIM ACTIVATION GAPS: $($pimIssues -join '; ')" } else { "PIM policies require MFA/Authentication Context for activation." }) `
+            -Result $(if ($pimIssues.Count -gt 0) { "PIM ACTIVATION GAPS: $($pimIssues -join '; ')" } else { "PIM policies require MFA/Authentication Context for activation." }) `
             -Evidence ($evidence | ConvertTo-Json -Depth 5) `
             -Remediation "In PIM > Role settings for each privileged role: Require Azure MFA on activation. Require Conditional Access Authentication Context (step-up auth). Set maximum activation duration to 1-4 hours. Require approval for Global Admin activation." `
             -MSDocsLink "https://learn.microsoft.com/en-us/azure/active-directory/privileged-identity-management/pim-how-to-change-default-settings" `
@@ -445,7 +445,7 @@ function Invoke-PRIVESC05-AppPermissionGrantAbuse {
             -Severity "High" -Status $status `
             -Description "Tests if a user can grant dangerous OAuth permission scopes to applications." `
             -AttackTechnique "POST /oauth2PermissionGrants with high-privilege scopes" `
-            -Result (if ($status -eq "PASS") { "BLOCKED (HTTP $code) - User cannot grant high-privilege OAuth scopes without admin approval." } else { "Error: $($_.Exception.Message)" }) `
+            -Result $(if ($status -eq "PASS") { "BLOCKED (HTTP $code) - User cannot grant high-privilege OAuth scopes without admin approval." } else { "Error: $($_.Exception.Message)" }) `
             -Evidence (@{ HTTPCode = $code; Error = $_.Exception.Message } | ConvertTo-Json) `
             -Remediation "Good if blocked. Ensure admin consent workflow is enabled so users can request approval." `
             -MSDocsLink "https://learn.microsoft.com/en-us/azure/active-directory/manage-apps/configure-user-consent" `

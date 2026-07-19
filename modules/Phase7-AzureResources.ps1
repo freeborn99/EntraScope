@@ -407,7 +407,7 @@ function Invoke-AZ05-PolicyComplianceCheck {
             -Severity "High" -Status $status `
             -Description "Checks Azure Policy compliance percentage and verifies security baseline policies are assigned. Low compliance = security controls are not enforced across resources." `
             -AttackTechnique "Non-compliant resources often have disabled logging, open network rules, weak encryption - each is a potential attack vector" `
-            -Result "Lowest subscription compliance: $lowestCompliance%. Security baseline policies assigned: $(if ($noSecurityPolicies) { 'NO' } else { 'YES' })" `
+            -Result "Lowest subscription compliance: $lowestCompliance%. Security baseline policies assigned: $$(if ($noSecurityPolicies) { 'NO' } else { 'YES' })" `
             -Evidence ($evidence | ConvertTo-Json -Depth 4) `
             -Remediation "1) Assign Microsoft Cloud Security Benchmark initiative to all subscriptions. 2) Target >90% compliance. 3) Use Azure Policy Remediation tasks to auto-fix non-compliant resources. 4) Set up email alerts for compliance drops." `
             -MSDocsLink "https://learn.microsoft.com/en-us/azure/governance/policy/how-to/get-compliance-data" `
