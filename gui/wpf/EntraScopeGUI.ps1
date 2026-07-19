@@ -144,19 +144,22 @@ function Start-Scan([object]$params) {
             $script:AzToken     = $null
 
             $moduleMap = @{
-                1="Phase1-Recon.ps1";      2="Phase2-CredAttacks.ps1"
-                3="Phase3-OAuthTokenAbuse.ps1"; 4="Phase4-PrivEsc.ps1"
-                5="Phase5-Persistence.ps1"; 6="Phase6-LateralMovement.ps1"
-                7="Phase7-AzureResources.ps1"; 8="Phase8-DetectionGaps.ps1"
+                "1"="Phase1-Recon.ps1";      "2"="Phase2-CredAttacks.ps1"
+                "3"="Phase3-OAuthTokenAbuse.ps1"; "4"="Phase4-PrivEsc.ps1"
+                "5"="Phase5-Persistence.ps1"; "6"="Phase6-LateralMovement.ps1"
+                "7"="Phase7-AzureResources.ps1"; "8"="Phase8-DetectionGaps.ps1"
             }
             $phaseFnMap = @{
-                1="Invoke-Phase1"; 2="Invoke-Phase2"; 3="Invoke-Phase3"
-                4="Invoke-Phase4"; 5="Invoke-Phase5"; 6="Invoke-Phase6"
-                7="Invoke-Phase7"; 8="Invoke-Phase8"
+                "1"="Invoke-Phase1"; "2"="Invoke-Phase2"; "3"="Invoke-Phase3"
+                "4"="Invoke-Phase4"; "5"="Invoke-Phase5"; "6"="Invoke-Phase6"
+                "7"="Invoke-Phase7"; "8"="Invoke-Phase8"
             }
             foreach ($n in $phases) {
-                $mf = Join-Path $Root "modules\$($moduleMap[$n])"
-                if (Test-Path $mf) { . $mf }
+                $nStr = [string]$n
+                if ($moduleMap.ContainsKey($nStr)) {
+                    $mf = Join-Path $Root "modules\$($moduleMap[$nStr])"
+                    if (Test-Path $mf -PathType Leaf) { . $mf }
+                }
             }
 
             if (-not $dryRun) {
@@ -215,16 +218,19 @@ function Start-Scan([object]$params) {
             foreach ($n in ($phases | Sort-Object)) {
                 if ($sync.Cancel) { Write-EntraLog "Cancelled" Warn; break }
                 $i++
-                $fn = $phaseFnMap[$n]
+                $nStr = [string]$n
+                if (-not $phaseFnMap.ContainsKey($nStr)) { continue }
+                $fn = $phaseFnMap[$nStr]
+                
                 if (Get-Command $fn -ErrorAction SilentlyContinue) {
-                    Write-EntraLog "▶ Phase $n — $fn" Attack
-                    $sync.LogQueue.Enqueue("PROGRESS`t$i`t$total`tPhase $n")
+                    Write-EntraLog "▶ Phase $nStr — $fn" Attack
+                    $sync.LogQueue.Enqueue("PROGRESS`t$i`t$total`tPhase $nStr")
                     try {
                         $r = & $fn
                         if ($r) { $r | ForEach-Object { $sync.Results.Add($_) } }
-                    } catch { Write-EntraLog "Phase $n error: $($_.Exception.Message)" Error }
+                    } catch { Write-EntraLog "Phase $nStr error: $($_.Exception.Message)" Error }
                 } else {
-                    Write-EntraLog "Phase $n module not found — skipping" Warn
+                    Write-EntraLog "Phase $nStr module not found — skipping" Warn
                 }
             }
             $sync.Status = "Done"
@@ -799,10 +805,14 @@ function saveCfg(){
 
 // Scan
 function startScan(){
-  const phases=PH.filter(p=>document.getElementById('pc'+p.n)?.querySelector('input')?.checked).map(p=>p.n);
-  if(!phases.length){toast('Select at least one phase','tw');return}
-  ps({action:'startScan',phases,authMethod:G.auth,dryRun:document.getElementById('r-dry').checked,
-      clientId:document.getElementById('r-cid').value,clientSecret:document.getElementById('r-sec').value});
+  try {
+    const phases=PH.filter(p=>document.getElementById('pc'+p.n)?.querySelector('input')?.checked).map(p=>p.n);
+    if(!phases.length){toast('Select at least one phase','tw');return}
+    ps({action:'startScan',phases,authMethod:G.auth,dryRun:document.getElementById('r-dry').checked,
+        clientId:document.getElementById('r-cid').value,clientSecret:document.getElementById('r-sec').value});
+  } catch (e) {
+    toast('JS Error: ' + e.message, 'te');
+  }
 }
 function cancelScan(){ps({action:'cancelScan'})}
 
@@ -973,9 +983,13 @@ $app.Add_DispatcherUnhandledException({
 # Explicitly create and retain the delegate so it doesn't get garbage-collected
 # and bypasses the PowerShell event queue (which is blocked by ShowDialog).
 $script:webMsgDelegate = [System.EventHandler[Microsoft.Web.WebView2.Core.CoreWebView2WebMessageReceivedEventArgs]] {
-    param($sender, $args)
-    $raw = $args.TryGetWebMessageAsString()
-    Handle-Message $raw
+    param($EventSender, $EventArgs)
+    try {
+        $raw = $EventArgs.TryGetWebMessageAsString()
+        Handle-Message $raw
+    } catch {
+        # Silent swallow for delegate crashes in prod
+    }
 }
 
 $window.Add_Loaded({
