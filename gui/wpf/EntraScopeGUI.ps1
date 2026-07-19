@@ -174,6 +174,9 @@ function Start-Scan([object]$params) {
                     } catch { Write-EntraLog "TenantId discovery failed: $($_.Exception.Message)" Warn }
                 }
                 switch ($authMethod) {
+                    "None" {
+                        Write-EntraLog "Recon-only mode — skipping authentication" Warn
+                    }
                     "DeviceCode" {
                         $dcBody = @{ client_id="04b07795-8ddb-461a-bbee-02f9e1bf7b46"
                                      scope="https://graph.microsoft.com/.default offline_access" }
@@ -239,6 +242,41 @@ function Start-Scan([object]$params) {
                         } catch {
                             Write-EntraLog ("Auth failed: " + $_.Exception.Message) Error
                         }
+                    }
+                }
+
+                # Acquire ARM token for Azure Resource phases (7/8) if Graph auth succeeded
+                if ($script:AccessToken -and -not $script:AzToken) {
+                    Write-EntraLog "Acquiring Azure Management token..." Info
+                    try {
+                        $armBody = @{ client_id="04b07795-8ddb-461a-bbee-02f9e1bf7b46"
+                                      scope="https://management.azure.com/.default offline_access" }
+                        $armDc = Invoke-RestMethod "https://login.microsoftonline.com/$tid/oauth2/v2.0/devicecode" `
+                            -Method POST -Body $armBody -ContentType "application/x-www-form-urlencoded" -TimeoutSec 15
+                        Write-EntraLog ("ARM device code: " + $armDc.user_code + " — open " + $armDc.verification_uri) Attack
+                        $sync.LogQueue.Enqueue("AUTH_CODE`t$($armDc.user_code)`t$($armDc.verification_uri)")
+                        $armDeadline = (Get-Date).AddSeconds($armDc.expires_in)
+                        while ((Get-Date) -lt $armDeadline -and -not $sync.Cancel) {
+                            Start-Sleep 5
+                            try {
+                                $armTb = @{ grant_type="urn:ietf:params:oauth:grant-type:device_code"
+                                            device_code=$armDc.device_code
+                                            client_id="04b07795-8ddb-461a-bbee-02f9e1bf7b46" }
+                                $armTok = Invoke-RestMethod "https://login.microsoftonline.com/$tid/oauth2/v2.0/token" `
+                                    -Method POST -Body $armTb -ContentType "application/x-www-form-urlencoded" -TimeoutSec 10
+                                $script:AzToken = $armTok.access_token
+                                Write-EntraLog "ARM token acquired" Success
+                                break
+                            } catch {
+                                $armErr = $null; try { $armErr = $_.ErrorDetails.Message | ConvertFrom-Json } catch {}
+                                if ($armErr.error -ne "authorization_pending") {
+                                    Write-EntraLog ("ARM auth skipped: " + $_.Exception.Message) Warn
+                                    break
+                                }
+                            }
+                        }
+                    } catch {
+                        Write-EntraLog ("ARM token skipped: " + $_.Exception.Message) Warn
                     }
                 }
             } else {
@@ -695,9 +733,9 @@ input[type=checkbox]{accent-color:var(--ac);width:15px;height:15px;cursor:pointe
       <div class="card">
         <div class="card-hd">Authentication Method</div>
         <div class="asel">
-          <div class="abtn on" id="a-int" onclick="selAuth('Interactive')">🖥 Interactive<br><small>Browser popup</small></div>
-          <div class="abtn" id="a-dev" onclick="selAuth('DeviceCode')">📱 Device Code<br><small>Code + URL</small></div>
+          <div class="abtn on" id="a-int" onclick="selAuth('Interactive')">🔐 Sign In (Device Code)<br><small>Opens browser to authenticate</small></div>
           <div class="abtn" id="a-sp"  onclick="selAuth('ServicePrincipal')">🔑 Service Principal<br><small>Client ID + Secret</small></div>
+          <div class="abtn" id="a-dev" onclick="selAuth('None')">🔍 Recon Only<br><small>No authentication</small></div>
         </div>
         <div class="spf" id="spf">
           <div class="g2">
