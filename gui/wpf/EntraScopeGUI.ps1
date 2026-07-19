@@ -532,13 +532,10 @@ function Start-DrainTimer {
                     $authWindow.Content = $authWebView
                     
                     $authWindow.Add_Loaded({
-                        $null = $authWebView.EnsureCoreWebView2Async($null)
-                        $atimer = [System.Windows.Threading.DispatcherTimer]::new()
-                        $atimer.Interval = [TimeSpan]::FromMilliseconds(100)
-                        $atimer.Add_Tick({
-                            if ($authWebView.CoreWebView2) {
-                                $atimer.Stop()
-                                $authWebView.CoreWebView2.add_NavigationStarting({
+                        $authWebView.add_CoreWebView2InitializationCompleted({
+                            param($wvSender, $eArgs)
+                            if ($eArgs.IsSuccess) {
+                                $wvSender.CoreWebView2.add_NavigationStarting({
                                     param($sender, $e)
                                     if ($e.Uri -and ($e.Uri.StartsWith("http://localhost") -or $e.Uri.StartsWith("https://localhost"))) {
                                         $e.Cancel = $true
@@ -557,10 +554,10 @@ function Start-DrainTimer {
                                     }
                                 })
                                 $authUrl = "https://login.microsoftonline.com/$tid/oauth2/v2.0/authorize?client_id=04b07795-8ddb-461a-bbee-02f9e1bf7b46&response_type=code&redirect_uri=http://localhost&scope=https://graph.microsoft.com/.default offline_access"
-                                $authWebView.CoreWebView2.Navigate($authUrl)
+                                $wvSender.CoreWebView2.Navigate($authUrl)
                             }
                         })
-                        $atimer.Start()
+                        $null = $authWebView.EnsureCoreWebView2Async($null)
                     })
                     $authWindow.ShowDialog() | Out-Null
                     $sync.AuthPopupClosed = $true
