@@ -208,7 +208,38 @@ function Start-Scan([object]$params) {
                             Write-EntraLog "Service Principal auth successful" Success
                         }
                     }
-                    default { Write-EntraLog "Interactive auth: run EntraScope.ps1 for browser popup" Warn }
+                    default {
+                        # Interactive browser auth can't work from a background runspace.
+                        # Use Device Code flow instead — the GUI will display the code + URL.
+                        Write-EntraLog "Interactive mode: using Device Code flow for GUI auth..." Info
+                        try {
+                            $dcBody = @{ client_id="04b07795-8ddb-461a-bbee-02f9e1bf7b46"
+                                         scope="https://graph.microsoft.com/.default offline_access" }
+                            $dcResp = Invoke-RestMethod "https://login.microsoftonline.com/$tid/oauth2/v2.0/devicecode" `
+                                -Method POST -Body $dcBody -ContentType "application/x-www-form-urlencoded" -TimeoutSec 15
+                            Write-EntraLog "Device code: $($dcResp.user_code) — open $($dcResp.verification_uri)" Attack
+                            $sync.LogQueue.Enqueue("AUTH_CODE`t$($dcResp.user_code)`t$($dcResp.verification_uri)")
+                            $deadline = (Get-Date).AddSeconds($dcResp.expires_in)
+                            while ((Get-Date) -lt $deadline -and -not $sync.Cancel) {
+                                Start-Sleep 5
+                                try {
+                                    $tb = @{ grant_type="urn:ietf:params:oauth:grant-type:device_code"
+                                             device_code=$dcResp.device_code
+                                             client_id="04b07795-8ddb-461a-bbee-02f9e1bf7b46" }
+                                    $tok = Invoke-RestMethod "https://login.microsoftonline.com/$tid/oauth2/v2.0/token" `
+                                        -Method POST -Body $tb -ContentType "application/x-www-form-urlencoded" -TimeoutSec 10
+                                    $script:AccessToken = $tok.access_token
+                                    Write-EntraLog "Authentication successful" Success
+                                    break
+                                } catch {
+                                    $e = $null; try { $e = $_.ErrorDetails.Message | ConvertFrom-Json } catch {}
+                                    if ($e.error -ne "authorization_pending") { throw }
+                                }
+                            }
+                        } catch {
+                            Write-EntraLog ("Auth failed: " + $_.Exception.Message) Error
+                        }
+                    }
                 }
             } else {
                 Write-EntraLog "DRY RUN — no live API calls" Warn
