@@ -311,44 +311,59 @@ function Start-DrainTimer {
     $t = [System.Windows.Threading.DispatcherTimer]::new()
     $t.Interval = [TimeSpan]::FromMilliseconds(100)
     $t.Add_Tick({
-        if (-not $script:webReady) { return }
-        $line = ""
-        while ($script:sync.LogQueue.TryDequeue([ref]$line)) {
-            if ($line.StartsWith("PROGRESS`t")) {
-                $p = $line -split "`t"
-                $script:webView.CoreWebView2.PostWebMessageAsJson(
-                    (@{ type="progress"; current=[int]$p[1]; total=[int]$p[2]; phase=$p[3] } | ConvertTo-Json -Compress))
-            } elseif ($line.StartsWith("SCAN_DONE`t")) {
-                $r    = @($script:sync.Results)
-                $pass = ($r | Where-Object Status -eq "PASS").Count
-                $fail = ($r | Where-Object Status -eq "FAIL").Count
-                $warn = ($r | Where-Object { $_.Status -in "WARNING","WARN" }).Count
-                $skip = ($r | Where-Object { $_.Status -in "SKIPPED","INFO","ERROR" }).Count
-                $sc   = [Math]::Round($pass / [Math]::Max($r.Count - $skip,1) * 100)
-                $script:webView.CoreWebView2.PostWebMessageAsJson(
-                    (@{ type="results"; data=$r } | ConvertTo-Json -Depth 10 -Compress))
-                $script:webView.CoreWebView2.PostWebMessageAsJson(
-                    (@{ type="complete"; score=$sc; pass=$pass; fail=$fail; warn=$warn } | ConvertTo-Json -Compress))
-                $script:webView.CoreWebView2.PostWebMessageAsJson(
-                    (@{ type="status"; value="Done" } | ConvertTo-Json -Compress))
-                try {
-                    $d  = Join-Path $Root "reports"; $null = New-Item -ItemType Directory -Path $d -Force
-                    $jp = Join-Path $d "EntraScope-$(Get-Date -Format yyyyMMdd-HHmm).json"
-                    @{ Results=$r } | ConvertTo-Json -Depth 10 | Set-Content $jp -Encoding UTF8
-                    $script:webView.CoreWebView2.PostWebMessageAsJson(
-                        (@{ type="toast"; message="Report saved: $([System.IO.Path]::GetFileName($jp))"; kind="success" } | ConvertTo-Json -Compress))
-                } catch {}
-                $t.Stop()
-            } elseif ($line.StartsWith("AUTH_CODE`t")) {
-                $p = $line -split "`t"
-                $script:webView.CoreWebView2.PostWebMessageAsJson(
-                    (@{ type="authCode"; code=$p[1]; url=$p[2] } | ConvertTo-Json -Compress))
-            } else {
-                $p   = $line -split "`t", 2
-                $lv  = $p[0]; $lm = if ($p.Count -gt 1) { $p[1] } else { $line }
-                $script:webView.CoreWebView2.PostWebMessageAsJson(
-                    (@{ type="log"; level=$lv; message=$lm } | ConvertTo-Json -Compress))
+        try {
+            if (-not $script:webReady) { return }
+            $line = ""
+            while ($script:sync.LogQueue.TryDequeue([ref]$line)) {
+                if ($null -eq $line) { continue }
+                if ($line.StartsWith("PROGRESS`t")) {
+                    $p = $line -split "`t"
+                    if ($script:webView -and $script:webView.CoreWebView2) {
+                        $script:webView.CoreWebView2.PostWebMessageAsJson(
+                            (@{ type="progress"; current=[int]$p[1]; total=[int]$p[2]; phase=$p[3] } | ConvertTo-Json -Compress))
+                    }
+                } elseif ($line.StartsWith("SCAN_DONE`t")) {
+                    $r    = @($script:sync.Results)
+                    $pass = @($r | Where-Object Status -eq "PASS").Count
+                    $fail = @($r | Where-Object Status -eq "FAIL").Count
+                    $warn = @($r | Where-Object { $_.Status -in "WARNING","WARN" }).Count
+                    $skip = @($r | Where-Object { $_.Status -in "SKIPPED","INFO","ERROR" }).Count
+                    $sc   = [Math]::Round($pass / [Math]::Max($r.Count - $skip,1) * 100)
+                    if ($script:webView -and $script:webView.CoreWebView2) {
+                        $script:webView.CoreWebView2.PostWebMessageAsJson(
+                            (@{ type="results"; data=$r } | ConvertTo-Json -Depth 10 -Compress))
+                        $script:webView.CoreWebView2.PostWebMessageAsJson(
+                            (@{ type="complete"; score=$sc; pass=$pass; fail=$fail; warn=$warn } | ConvertTo-Json -Compress))
+                        $script:webView.CoreWebView2.PostWebMessageAsJson(
+                            (@{ type="status"; value="Done" } | ConvertTo-Json -Compress))
+                    }
+                    try {
+                        $d  = Join-Path $Root "reports"; $null = New-Item -ItemType Directory -Path $d -Force
+                        $jp = Join-Path $d "EntraScope-$(Get-Date -Format yyyyMMdd-HHmm).json"
+                        @{ Results=$r } | ConvertTo-Json -Depth 10 | Set-Content $jp -Encoding UTF8
+                        if ($script:webView -and $script:webView.CoreWebView2) {
+                            $script:webView.CoreWebView2.PostWebMessageAsJson(
+                                (@{ type="toast"; message="Report saved: $([System.IO.Path]::GetFileName($jp))"; kind="success" } | ConvertTo-Json -Compress))
+                        }
+                    } catch {}
+                    $t.Stop()
+                } elseif ($line.StartsWith("AUTH_CODE`t")) {
+                    $p = $line -split "`t"
+                    if ($script:webView -and $script:webView.CoreWebView2) {
+                        $script:webView.CoreWebView2.PostWebMessageAsJson(
+                            (@{ type="authCode"; code=$p[1]; url=$p[2] } | ConvertTo-Json -Compress))
+                    }
+                } else {
+                    $p   = $line -split "`t", 2
+                    $lv  = $p[0]; $lm = if ($p.Count -gt 1) { $p[1] } else { $line }
+                    if ($script:webView -and $script:webView.CoreWebView2) {
+                        $script:webView.CoreWebView2.PostWebMessageAsJson(
+                            (@{ type="log"; level=$lv; message=$lm } | ConvertTo-Json -Compress))
+                    }
+                }
             }
+        } catch {
+            "TICK ERROR: $($_.Exception.Message)`n$($_.ScriptStackTrace)`n$($_.Exception.StackTrace)" | Add-Content (Join-Path $Root "tick-error.txt")
         }
     })
     $t.Start()
@@ -976,7 +991,7 @@ $window.Content = $webView
 $app = [System.Windows.Application]::new()
 $app.Add_DispatcherUnhandledException({
     param($s, $e)
-    Write-Host "[GUI ERROR] $($e.Exception.Message)" -ForegroundColor Red
+    Write-Host "[GUI ERROR] $($e.Exception.Message)`n$($e.Exception.StackTrace)" -ForegroundColor Red
     $e.Handled = $true
 })
 
