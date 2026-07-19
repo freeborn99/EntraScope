@@ -30,10 +30,8 @@ Unlike compliance audit tools that check policy settings, EntraScope **actively 
 *(Replace these placeholders with your actual screenshots after taking them)*
 
 ![EntraScope Main Dashboard](docs/assets/dashboard.png)  
-*Modern dark-mode WPF GUI powered by WebView2.*
 
-![EntraScope Scan Results](docs/assets/results.png)  
-*Detailed test results showing attack techniques and remediation advice.*
+![EntraScope Scan Results](docs/assets/results.png)
 
 ---
 

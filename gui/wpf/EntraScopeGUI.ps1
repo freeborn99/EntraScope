@@ -984,12 +984,11 @@ $window.Add_Loaded({
         $webView.CoreWebView2.Settings.AreDevToolsEnabled            = $false
 
         # Message bridge: JS → PowerShell
-        Register-ObjectEvent -InputObject $webView.CoreWebView2 `
-            -EventName WebMessageReceived `
-            -Action {
-                $raw = $EventArgs.TryGetWebMessageAsString()
-                Handle-Message $raw
-            } | Out-Null
+        $webView.CoreWebView2.add_WebMessageReceived({
+            param($sender, $args)
+            $raw = $args.TryGetWebMessageAsString()
+            Handle-Message $raw
+        })
 
         # Mark ready and load page
         $script:webView  = $webView
