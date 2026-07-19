@@ -393,10 +393,6 @@ function Handle-Message([string]$raw) {
         "getReports" {
             Send-Page (@{ type="reportList"; data=@(Get-ReportList) } | ConvertTo-Json -Depth 5 -Compress)
         }
-            Send-Page (@{ type="toast"; message="Setup starting... check log for auth code"; kind="success" } | ConvertTo-Json -Compress)
-            if ($script:drainTimer) { $script:drainTimer.Stop() }
-            $script:drainTimer = Start-DrainTimer
-        }
         "cleanupEnv" {
             $rs = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspace()
             $rs.ApartmentState = "MTA"; $rs.Open()
