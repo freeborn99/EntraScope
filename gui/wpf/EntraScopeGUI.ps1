@@ -965,7 +965,15 @@ $app.Add_DispatcherUnhandledException({
     $e.Handled = $true
 })
 
-# Wire WebView2 — polling timer (avoids all PS event-type-casting issues)
+function Register-WebViewEvents {
+    Register-ObjectEvent -InputObject $script:webView.CoreWebView2 `
+        -EventName WebMessageReceived `
+        -Action {
+            $raw = $EventArgs.TryGetWebMessageAsString()
+            Handle-Message $raw
+        } | Out-Null
+}
+
 $window.Add_Loaded({
     # Start the async initialisation
     $null = $webView.EnsureCoreWebView2Async($null)
@@ -983,16 +991,13 @@ $window.Add_Loaded({
         $webView.CoreWebView2.Settings.IsStatusBarEnabled            = $false
         $webView.CoreWebView2.Settings.AreDevToolsEnabled            = $false
 
+        $script:webView = $webView
+        $script:webReady = $true
+
         # Message bridge: JS → PowerShell
-        $webView.CoreWebView2.add_WebMessageReceived({
-            param($sender, $args)
-            $raw = $args.TryGetWebMessageAsString()
-            Handle-Message $raw
-        })
+        Register-WebViewEvents
 
         # Mark ready and load page
-        $script:webView  = $webView
-        $script:webReady = $true
         $webView.CoreWebView2.NavigateToString($script:html)
 
         Write-Host "[EntraScope GUI] WebView2 ready — UI loaded." -ForegroundColor Green
