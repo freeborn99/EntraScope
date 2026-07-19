@@ -113,13 +113,19 @@ Click **⚙️ Configure** in the sidebar:
 
 Click **💾 Save**.
 
-### Step 2 — Add Honeypot Accounts (for credential tests)
+### Step 2 - Add Honeypot Accounts (for credential tests)
 
 Honeypot accounts are **dedicated decoy accounts** that credential tests fire bad passwords at. They must exist in your tenant but should never be used by real people.
 
-See **[docs/ACCOUNT-SETUP.md](docs/ACCOUNT-SETUP.md)** for full creation instructions.
+**Option A: Auto-Provision (Recommended)**
+1. Check the `Auto-provision Test Environment` box on the **Run Scan** tab.
+2. When you run a scan as a Global Admin, EntraScope will automatically create the honeypot accounts and a test app for you.
+3. When the scan finishes, you'll be prompted to automatically remove them.
 
-Once created, add them in **⚙️ Configure → Honeypot Accounts**.
+**Option B: Manual Setup**
+See **[docs/ACCOUNT-SETUP.md](docs/ACCOUNT-SETUP.md)** for full manual creation instructions.
+
+Once created manually, add them in **🔧 Configure → Honeypot Accounts**.
 
 > Tests that need honeypot accounts show `SKIPPED` with a clear message if none are configured — nothing will ever fire at real user accounts.
 

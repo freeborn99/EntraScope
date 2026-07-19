@@ -95,6 +95,7 @@ function Start-Scan([object]$params) {
     $dryRun     = [bool]($params.dryRun)
     $clientId   = if ($params.clientId)   { $params.clientId }    else { "" }
     $clientSec  = if ($params.clientSecret){ $params.clientSecret } else { "" }
+    $autoProv   = [bool]($params.autoProvision)
 
     $rs = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspace()
     $rs.ApartmentState = "MTA"
@@ -106,6 +107,7 @@ function Start-Scan([object]$params) {
     $rs.SessionStateProxy.SetVariable("dryRun",     $dryRun)
     $rs.SessionStateProxy.SetVariable("clientId",   $clientId)
     $rs.SessionStateProxy.SetVariable("clientSec",  $clientSec)
+    $rs.SessionStateProxy.SetVariable("autoProvision", $autoProv)
 
     $ps = [powershell]::Create()
     $ps.Runspace = $rs
@@ -283,6 +285,27 @@ function Start-Scan([object]$params) {
                 Write-EntraLog "DRY RUN — no live API calls" Warn
             }
 
+            if ($autoProvision -and -not $dryRun -and $authMethod -ne "None") {
+                Write-EntraLog "▶ Auto-provisioning Test Environment..." Attack
+                $setupModule = Join-Path $Root "modules\SetupTestEnvironment.ps1"
+                if (Test-Path $setupModule) { 
+                    . $setupModule 
+                    try {
+                        $setupRes = New-EntraScopeTestEnvironment
+                        if ($setupRes.Success) {
+                            Write-EntraLog "Test environment provisioned successfully" Success
+                            $sync.LogQueue.Enqueue("SETUP_DONE`t" + ($setupRes | ConvertTo-Json -Depth 10 -Compress))
+                        } else {
+                            Write-EntraLog "Test environment setup failed: $($setupRes.Message)" Error
+                        }
+                    } catch {
+                        Write-EntraLog "Test environment setup error: $($_.Exception.Message)" Error
+                    }
+                } else {
+                    Write-EntraLog "modules\SetupTestEnvironment.ps1 not found — skipping auto-provision" Warn
+                }
+            }
+
             $total = @($phases).Count; $i = 0
             foreach ($n in ($phases | Sort-Object)) {
                 if ($sync.Cancel) { Write-EntraLog "Cancelled" Warn; break }
@@ -370,57 +393,6 @@ function Handle-Message([string]$raw) {
         "getReports" {
             Send-Page (@{ type="reportList"; data=@(Get-ReportList) } | ConvertTo-Json -Depth 5 -Compress)
         }
-        "setupEnv" {
-            # Run setup in a background runspace
-            $rs = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspace()
-            $rs.ApartmentState = "MTA"; $rs.Open()
-            $rs.SessionStateProxy.SetVariable("sync", $script:sync)
-            $rs.SessionStateProxy.SetVariable("Root", $Root)
-            $ps = [powershell]::Create(); $ps.Runspace = $rs
-            $null = $ps.AddScript({
-                try {
-                    function Write-EntraLog { param([string]$Message,[string]$Level="Info"); $sync.LogQueue.Enqueue("$Level`t$Message") }
-                    $cfgPath = Join-Path $Root "config\scope.json"
-                    if (Test-Path $cfgPath) { $script:Config = Get-Content $cfgPath -Raw | ConvertFrom-Json }
-                    # Authenticate with device code for setup
-                    $tid = $script:Config.TenantId
-                    if (-not $tid -and $script:Config.TenantDomain) {
-                        try {
-                            $oidc = Invoke-RestMethod ("https://login.microsoftonline.com/" + $script:Config.TenantDomain + "/.well-known/openid-configuration") -TimeoutSec 10
-                            $tid = $oidc.issuer -replace ".*/([0-9a-f-]{36})/.*",'$1'
-                            $script:Config.TenantId = $tid
-                        } catch {}
-                    }
-                    Write-EntraLog "Authenticating for setup (requires Global Admin)..." Info
-                    $dcBody = @{ client_id="04b07795-8ddb-461a-bbee-02f9e1bf7b46"; scope="https://graph.microsoft.com/.default offline_access" }
-                    $dcResp = Invoke-RestMethod ("https://login.microsoftonline.com/" + $tid + "/oauth2/v2.0/devicecode") -Method POST -Body $dcBody -ContentType "application/x-www-form-urlencoded" -TimeoutSec 15
-                    Write-EntraLog ("Setup auth code: " + $dcResp.user_code + " - open " + $dcResp.verification_uri) Attack
-                    $sync.LogQueue.Enqueue("AUTH_CODE`t$($dcResp.user_code)`t$($dcResp.verification_uri)")
-                    $deadline = (Get-Date).AddSeconds($dcResp.expires_in)
-                    while ((Get-Date) -lt $deadline) {
-                        Start-Sleep 5
-                        try {
-                            $tb = @{ grant_type="urn:ietf:params:oauth:grant-type:device_code"; device_code=$dcResp.device_code; client_id="04b07795-8ddb-461a-bbee-02f9e1bf7b46" }
-                            $tok = Invoke-RestMethod ("https://login.microsoftonline.com/" + $tid + "/oauth2/v2.0/token") -Method POST -Body $tb -ContentType "application/x-www-form-urlencoded" -TimeoutSec 10
-                            $script:AccessToken = $tok.access_token
-                            Write-EntraLog "Authentication successful" Success
-                            break
-                        } catch {
-                            $e = $null; try { $e = $_.ErrorDetails.Message | ConvertFrom-Json } catch {}
-                            if ($e.error -ne "authorization_pending") { throw }
-                        }
-                    }
-                    if (-not $script:AccessToken) { throw "Authentication timed out" }
-                    # Load and run setup module
-                    $setupModule = Join-Path $Root "modules\SetupTestEnvironment.ps1"
-                    if (Test-Path $setupModule) { . $setupModule }
-                    $result = New-EntraScopeTestEnvironment
-                    $sync.LogQueue.Enqueue("SETUP_DONE`t" + ($result | ConvertTo-Json -Depth 10 -Compress))
-                } catch {
-                    $sync.LogQueue.Enqueue("SETUP_DONE`t" + (@{ Success=$false; Message=$_.Exception.Message } | ConvertTo-Json -Compress))
-                }
-            })
-            $null = $ps.BeginInvoke()
             Send-Page (@{ type="toast"; message="Setup starting... check log for auth code"; kind="success" } | ConvertTo-Json -Compress)
             if ($script:drainTimer) { $script:drainTimer.Stop() }
             $script:drainTimer = Start-DrainTimer
@@ -430,39 +402,14 @@ function Handle-Message([string]$raw) {
             $rs.ApartmentState = "MTA"; $rs.Open()
             $rs.SessionStateProxy.SetVariable("sync", $script:sync)
             $rs.SessionStateProxy.SetVariable("Root", $Root)
+            $rs.SessionStateProxy.SetVariable("AccessToken", $script:AccessToken)
             $ps = [powershell]::Create(); $ps.Runspace = $rs
             $null = $ps.AddScript({
                 try {
                     function Write-EntraLog { param([string]$Message,[string]$Level="Info"); $sync.LogQueue.Enqueue("$Level`t$Message") }
-                    $cfgPath = Join-Path $Root "config\scope.json"
-                    if (Test-Path $cfgPath) { $script:Config = Get-Content $cfgPath -Raw | ConvertFrom-Json }
-                    $tid = $script:Config.TenantId
-                    if (-not $tid -and $script:Config.TenantDomain) {
-                        try {
-                            $oidc = Invoke-RestMethod ("https://login.microsoftonline.com/" + $script:Config.TenantDomain + "/.well-known/openid-configuration") -TimeoutSec 10
-                            $tid = $oidc.issuer -replace ".*/([0-9a-f-]{36})/.*",'$1'
-                        } catch {}
-                    }
-                    Write-EntraLog "Authenticating for cleanup..." Info
-                    $dcBody = @{ client_id="04b07795-8ddb-461a-bbee-02f9e1bf7b46"; scope="https://graph.microsoft.com/.default offline_access" }
-                    $dcResp = Invoke-RestMethod ("https://login.microsoftonline.com/" + $tid + "/oauth2/v2.0/devicecode") -Method POST -Body $dcBody -ContentType "application/x-www-form-urlencoded" -TimeoutSec 15
-                    Write-EntraLog ("Cleanup auth code: " + $dcResp.user_code + " - open " + $dcResp.verification_uri) Attack
-                    $sync.LogQueue.Enqueue("AUTH_CODE`t$($dcResp.user_code)`t$($dcResp.verification_uri)")
-                    $deadline = (Get-Date).AddSeconds($dcResp.expires_in)
-                    while ((Get-Date) -lt $deadline) {
-                        Start-Sleep 5
-                        try {
-                            $tb = @{ grant_type="urn:ietf:params:oauth:grant-type:device_code"; device_code=$dcResp.device_code; client_id="04b07795-8ddb-461a-bbee-02f9e1bf7b46" }
-                            $tok = Invoke-RestMethod ("https://login.microsoftonline.com/" + $tid + "/oauth2/v2.0/token") -Method POST -Body $tb -ContentType "application/x-www-form-urlencoded" -TimeoutSec 10
-                            $script:AccessToken = $tok.access_token
-                            Write-EntraLog "Authentication successful" Success
-                            break
-                        } catch {
-                            $e = $null; try { $e = $_.ErrorDetails.Message | ConvertFrom-Json } catch {}
-                            if ($e.error -ne "authorization_pending") { throw }
-                        }
-                    }
-                    if (-not $script:AccessToken) { throw "Authentication timed out" }
+                    $script:AccessToken = $AccessToken
+                    if (-not $script:AccessToken) { throw "Not authenticated. Session token missing." }
+                    Write-EntraLog "Starting cleanup using existing session..." Info
                     $setupModule = Join-Path $Root "modules\SetupTestEnvironment.ps1"
                     if (Test-Path $setupModule) { . $setupModule }
                     $result = Remove-EntraScopeTestEnvironment
@@ -472,7 +419,7 @@ function Handle-Message([string]$raw) {
                 }
             })
             $null = $ps.BeginInvoke()
-            Send-Page (@{ type="toast"; message="Cleanup starting... check log for auth code"; kind="success" } | ConvertTo-Json -Compress)
+            Send-Page (@{ type="toast"; message="Cleanup starting..."; kind="success" } | ConvertTo-Json -Compress)
             if ($script:drainTimer) { $script:drainTimer.Stop() }
             $script:drainTimer = Start-DrainTimer
         }
@@ -868,43 +815,6 @@ input[type=checkbox]{accent-color:var(--ac);width:15px;height:15px;cursor:pointe
         </div>
       </div>
 
-      <!-- TEST ENVIRONMENT SETUP -->
-      <div class="card" id="setup-card">
-        <div class="card-hd">🔧 Test Environment</div>
-        <div style="font-size:.83rem;color:var(--dim);margin-bottom:10px">
-          Automatically create honeypot accounts, test users, and app registrations needed for a full scan.
-          Requires <b>Global Administrator</b>.
-        </div>
-        <div id="setup-status"></div>
-        <div class="bgrp">
-          <button class="btn btn-p" id="setup-btn" onclick="requestSetup()">🔧 Setup Test Environment</button>
-          <button class="btn btn-d" id="cleanup-btn" style="display:none" onclick="requestCleanup()">🗑 Remove Test Objects</button>
-        </div>
-      </div>
-
-      <!-- SETUP APPROVAL MODAL -->
-      <div id="setup-modal" class="modal-overlay" style="display:none">
-        <div class="modal-box">
-          <div class="modal-hd">🔧 Test Environment Setup</div>
-          <div class="modal-body">
-            <div style="margin-bottom:12px;color:var(--dim);font-size:.85rem">
-              The following objects will be created in your tenant:
-            </div>
-            <div id="setup-preview" class="setup-list"></div>
-            <div style="margin-top:12px;padding:10px;background:rgba(255,180,0,.08);border-radius:6px;border:1px solid rgba(255,180,0,.2)">
-              <div style="font-weight:700;color:#ffb400;font-size:.85rem">⚠️ Required Permissions</div>
-              <div style="font-size:.8rem;color:var(--dim);margin-top:4px">
-                Global Administrator — or — User Administrator + Application Administrator
-              </div>
-            </div>
-          </div>
-          <div class="modal-foot">
-            <button class="btn btn-p" onclick="approveSetup()">✅ Approve & Create</button>
-            <button class="btn btn-g" onclick="closeModal('setup-modal')">❌ Cancel</button>
-          </div>
-        </div>
-      </div>
-
       <!-- CLEANUP CONFIRMATION MODAL -->
       <div id="cleanup-modal" class="modal-overlay" style="display:none">
         <div class="modal-box">
@@ -952,6 +862,12 @@ input[type=checkbox]{accent-color:var(--ac);width:15px;height:15px;cursor:pointe
           <label class="trow" style="margin-left:auto">
             <input type="checkbox" id="r-dry"/>
             <span style="font-size:.83rem">Dry Run (no live API calls)</span>
+          </label>
+        </div>
+        <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--bdr)">
+          <label class="trow">
+            <input type="checkbox" id="r-setup" checked/>
+            <span style="font-size:.83rem">Auto-provision Test Environment (Requires Global Admin)</span>
           </label>
         </div>
       </div>
@@ -1094,7 +1010,8 @@ function startScan(){
     const phases=PH.filter(p=>document.getElementById('pc'+p.n)?.querySelector('input')?.checked).map(p=>p.n);
     if(!phases.length){toast('Select at least one phase','tw');return}
     ps({action:'startScan',phases,authMethod:G.auth,dryRun:document.getElementById('r-dry').checked,
-        clientId:document.getElementById('r-cid').value,clientSecret:document.getElementById('r-sec').value});
+        clientId:document.getElementById('r-cid').value,clientSecret:document.getElementById('r-sec').value,
+        autoProvision:document.getElementById('r-setup').checked});
   } catch (e) {
     toast('JS Error: ' + e.message, 'te');
   }
@@ -1223,7 +1140,7 @@ window.chrome.webview.addEventListener('message',ev=>{
       document.getElementById('plbl').textContent=`${m.phase} — ${m.current}/${m.total} phases`;
       break;
     case 'results':  renderResults(m.data); updDash(m.data); nav('res'); break;
-    case 'complete': setStatus('Done'); toast(`Done — Score:${m.score}%  Fail:${m.fail}`,'ts'); break;
+    case 'complete': setStatus('Done'); toast(`Done — Score:${m.score}%  Fail:${m.fail}`,'ts'); if(document.getElementById('r-setup')?.checked){ps({action:'getSetupManifest'})}; break;
     case 'reportList': renderRpts(m.data); break;
     case 'toast':    toast(m.message,{success:'ts',warn:'tw',error:'te'}[m.kind]||'ti'); break;
     case 'clearLog': clrLog(); break;

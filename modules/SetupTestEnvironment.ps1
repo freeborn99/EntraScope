@@ -134,6 +134,23 @@ function New-EntraScopeTestEnvironment {
         } | ConvertTo-Json -Depth 5
 
         try {
+            $checkUrl = $graphBase + "/users/" + $userDef.UPN
+            try {
+                $existingUser = Invoke-RestMethod -Uri $checkUrl -Method GET -Headers $headers -ErrorAction Stop
+                Write-EntraLog ("  [SETUP] User already exists: " + $userDef.UPN) -Level Info
+                $manifestObjects.Add([PSCustomObject]@{
+                    type        = "User"
+                    id          = $existingUser.id
+                    displayName = $existingUser.displayName
+                    upn         = $existingUser.userPrincipalName
+                })
+                $manifestPasswords.Add([PSCustomObject]@{
+                    upn      = $existingUser.userPrincipalName
+                    password = "Unknown (Pre-existing)"
+                })
+                continue
+            } catch {}
+
             $url = $graphBase + "/users"
             Write-EntraLog ("  [SETUP] Creating user: " + $userDef.UPN) -Level Info
 
@@ -170,10 +187,34 @@ function New-EntraScopeTestEnvironment {
     } | ConvertTo-Json -Depth 5
 
     try {
-        $url = $graphBase + "/applications"
-        Write-EntraLog ("  [SETUP] Creating app registration: " + $appName) -Level Info
+        $checkAppUrl = $graphBase + "/applications?`$filter=displayName eq '" + $appName + "'"
+        $appExists = $false
+        try {
+            $existingAppSearch = Invoke-RestMethod -Uri $checkAppUrl -Method GET -Headers $headers -ErrorAction Stop
+            if ($existingAppSearch.value -and $existingAppSearch.value.Count -gt 0) {
+                $existingApp = $existingAppSearch.value[0]
+                Write-EntraLog ("  [SETUP] App registration already exists: " + $appName) -Level Info
+                
+                $manifestObjects.Add([PSCustomObject]@{
+                    type        = "Application"
+                    id          = $existingApp.id
+                    displayName = $existingApp.displayName
+                    upn         = $null
+                })
 
-        $appResponse = Invoke-RestMethod -Uri $url -Method POST -Headers $headers -Body $appBody -ErrorAction Stop
+                $manifestPasswords.Add([PSCustomObject]@{
+                    upn      = $existingApp.displayName
+                    password = "Unknown (Pre-existing)"
+                })
+                $appExists = $true
+            }
+        } catch {}
+
+        if (-not $appExists) {
+            $url = $graphBase + "/applications"
+            Write-EntraLog ("  [SETUP] Creating app registration: " + $appName) -Level Info
+
+            $appResponse = Invoke-RestMethod -Uri $url -Method POST -Headers $headers -Body $appBody -ErrorAction Stop
 
         Write-EntraLog ("  [+] Created app: " + $appResponse.displayName + " (id: " + $appResponse.id + ")") -Level Success
 
@@ -195,12 +236,13 @@ function New-EntraScopeTestEnvironment {
             upn         = $null
         })
 
-        $manifestPasswords.Add([PSCustomObject]@{
-            upn      = $appResponse.displayName
-            password = $credResponse.secretText
-        })
+            $manifestPasswords.Add([PSCustomObject]@{
+                upn      = $appResponse.displayName
+                password = $credResponse.secretText
+            })
 
-        $createdCount++
+            $createdCount++
+        }
     }
     catch {
         Write-EntraLog ("  [!] Failed to create app registration " + $appName + ": " + $_.Exception.Message) -Level Error
