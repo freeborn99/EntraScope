@@ -96,7 +96,7 @@ function Start-Scan([object]$params) {
     $clientId   = if ($params.clientId)   { $params.clientId }    else { "" }
     $clientSec  = if ($params.clientSecret){ $params.clientSecret } else { "" }
 
-    $rs = [runspacefactory]::CreateRunspace()
+    $rs = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspace()
     $rs.ApartmentState = "MTA"
     $rs.Open()
     $rs.SessionStateProxy.SetVariable("sync",       $script:sync)
@@ -240,14 +240,15 @@ function Start-Scan([object]$params) {
 
 # ─── 4. MESSAGE HANDLER (Page → PowerShell) ───────────────────────────────────
 function Handle-Message([string]$raw) {
-    try { $msg = $raw | ConvertFrom-Json } catch { return }
-    switch ($msg.action) {
-        "ready" {
-            $cfg = Read-ScopeConfig
-            if ($cfg) { Send-Page (@{ type="config"; data=$cfg } | ConvertTo-Json -Depth 10 -Compress) }
-            Send-Page (@{ type="reportList"; data=@(Get-ReportList) } | ConvertTo-Json -Depth 5 -Compress)
-            Send-Page (@{ type="status"; value="Idle"; root=$Root } | ConvertTo-Json -Compress)
-        }
+    try {
+        try { $msg = $raw | ConvertFrom-Json } catch { return }
+        switch ($msg.action) {
+            "ready" {
+                $cfg = Read-ScopeConfig
+                if ($cfg) { Send-Page (@{ type="config"; data=$cfg } | ConvertTo-Json -Depth 10 -Compress) }
+                Send-Page (@{ type="reportList"; data=@(Get-ReportList) } | ConvertTo-Json -Depth 5 -Compress)
+                Send-Page (@{ type="status"; value="Idle"; root=$Root } | ConvertTo-Json -Compress)
+            }
         "saveConfig" {
             try {
                 Save-ScopeConfig $msg.data
@@ -292,6 +293,10 @@ function Handle-Message([string]$raw) {
         "getReports" {
             Send-Page (@{ type="reportList"; data=@(Get-ReportList) } | ConvertTo-Json -Depth 5 -Compress)
         }
+    }
+    } catch {
+        $_ | Out-String | Add-Content (Join-Path $Root "debug.txt")
+        Send-Page (@{ type="toast"; message="Internal error: $($_.Exception.Message)"; kind="error" } | ConvertTo-Json -Compress)
     }
 }
 
@@ -965,13 +970,12 @@ $app.Add_DispatcherUnhandledException({
     $e.Handled = $true
 })
 
-function Register-WebViewEvents {
-    Register-ObjectEvent -InputObject $script:webView.CoreWebView2 `
-        -EventName WebMessageReceived `
-        -Action {
-            $raw = $EventArgs.TryGetWebMessageAsString()
-            Handle-Message $raw
-        } | Out-Null
+# Explicitly create and retain the delegate so it doesn't get garbage-collected
+# and bypasses the PowerShell event queue (which is blocked by ShowDialog).
+$script:webMsgDelegate = [System.EventHandler[Microsoft.Web.WebView2.Core.CoreWebView2WebMessageReceivedEventArgs]] {
+    param($sender, $args)
+    $raw = $args.TryGetWebMessageAsString()
+    Handle-Message $raw
 }
 
 $window.Add_Loaded({
@@ -995,7 +999,7 @@ $window.Add_Loaded({
         $script:webReady = $true
 
         # Message bridge: JS → PowerShell
-        Register-WebViewEvents
+        $webView.CoreWebView2.add_WebMessageReceived($script:webMsgDelegate)
 
         # Mark ready and load page
         $webView.CoreWebView2.NavigateToString($script:html)
