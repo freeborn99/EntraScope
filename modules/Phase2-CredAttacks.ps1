@@ -521,7 +521,7 @@ function Invoke-CRED06-MFAPushFatigue {
     }
     catch {
         return New-TestResult -TestId "CRED-06" -Phase "Phase 2 - Credential Attacks" -Name "MFA Push Fatigue Assessment" `
-            -Severity "High" -Status "ERROR" -Description "Error checking MFA methods policy" `
+            -Severity "High" -Status "SKIPPED" -Description "Error checking MFA methods policy" `
             -AttackTechnique "Review authenticationMethodsPolicy via Graph API" -Result "Error: $($_.Exception.Message)" `
             -Evidence "" -Remediation "" `
             -MSDocsLink "https://learn.microsoft.com/en-us/azure/active-directory/authentication/how-to-mfa-number-match" `

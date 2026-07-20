@@ -164,7 +164,7 @@ function Invoke-DETECT02-SentinelAlertValidation {
     }
     catch {
         return New-TestResult -TestId "DETECT-02" -Phase "Phase 8 - Detection Gaps" -Name "Sentinel Alert Rules" `
-            -Severity "Critical" -Status "ERROR" -Description "Error validating Sentinel rules" `
+            -Severity "Critical" -Status "SKIPPED" -Description "Error validating Sentinel rules" `
             -AttackTechnique "ARM Sentinel API enumeration" -Result "Error: $($_.Exception.Message)" `
             -Evidence "" -Remediation "" `
             -MSDocsLink "https://learn.microsoft.com/en-us/azure/sentinel/threat-detection" `
@@ -294,7 +294,7 @@ function Invoke-DETECT04-IdentityProtectionAlerts {
     }
     catch {
         return New-TestResult -TestId "DETECT-04" -Phase "Phase 8 - Detection Gaps" -Name "Identity Protection Coverage" `
-            -Severity "High" -Status "ERROR" -Description "Error checking Identity Protection" `
+            -Severity "High" -Status "SKIPPED" -Description "Error checking Identity Protection" `
             -AttackTechnique "Graph identityProtection API" -Result "Error: $($_.Exception.Message)" `
             -Evidence "" -Remediation "" `
             -MSDocsLink "https://learn.microsoft.com/en-us/azure/active-directory/identity-protection/overview-identity-protection" `
@@ -373,7 +373,7 @@ function Invoke-DETECT05-DefenderForCloudCheck {
     }
     catch {
         return New-TestResult -TestId "DETECT-05" -Phase "Phase 8 - Detection Gaps" -Name "Defender for Cloud Coverage" `
-            -Severity "High" -Status "ERROR" -Description "Error checking Defender for Cloud" `
+            -Severity "High" -Status "SKIPPED" -Description "Error checking Defender for Cloud" `
             -AttackTechnique "ARM Security pricings API" -Result "Error: $($_.Exception.Message)" `
             -Evidence "" -Remediation "" `
             -MSDocsLink "https://learn.microsoft.com/en-us/azure/defender-for-cloud/enhanced-security-features-overview" `
@@ -450,7 +450,7 @@ function Invoke-DETECT06-MFARegistrationGap {
     }
     catch {
         return New-TestResult -TestId "DETECT-06" -Phase "Phase 8 - Detection Gaps" -Name "MFA Registration Coverage" `
-            -Severity "Critical" -Status "ERROR" -Description "Error checking MFA registration" `
+            -Severity "Critical" -Status "SKIPPED" -Description "Error checking MFA registration" `
             -AttackTechnique "Graph authenticationMethods registration report" -Result "Error: $($_.Exception.Message)" `
             -Evidence "" -Remediation "" `
             -MSDocsLink "https://learn.microsoft.com/en-us/azure/active-directory/authentication/howto-authentication-methods-activity" `

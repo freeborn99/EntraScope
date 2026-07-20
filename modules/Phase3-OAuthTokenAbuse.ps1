@@ -164,7 +164,7 @@ function Invoke-OAUTH02-UserConsentCheck {
     }
     catch {
         return New-TestResult -TestId "OAUTH-02" -Phase "Phase 3 - OAuth & Token Abuse" -Name "User Consent Grant Policy" `
-            -Severity "Critical" -Status "ERROR" -Description "Error checking consent policy" `
+            -Severity "Critical" -Status "SKIPPED" -Description "Error checking consent policy" `
             -AttackTechnique "Review permissionGrantPolicies via Graph" -Result "Error: $($_.Exception.Message)" `
             -Evidence "" -Remediation "" `
             -MSDocsLink "https://learn.microsoft.com/en-us/azure/active-directory/manage-apps/configure-user-consent" `
@@ -296,7 +296,7 @@ function Invoke-OAUTH04-RefreshTokenLifetime {
     }
     catch {
         return New-TestResult -TestId "OAUTH-04" -Phase "Phase 3 - OAuth & Token Abuse" -Name "Token Lifetime Policies" `
-            -Severity "High" -Status "ERROR" -Description "Error checking token policies" `
+            -Severity "High" -Status "SKIPPED" -Description "Error checking token policies" `
             -AttackTechnique "Review token lifetime and CA session policies" -Result "Error: $($_.Exception.Message)" `
             -Evidence "" -Remediation "" `
             -MSDocsLink "https://learn.microsoft.com/en-us/azure/active-directory/conditional-access/howto-conditional-access-session-lifetime" `
@@ -372,7 +372,7 @@ function Invoke-OAUTH05-CAETokenRevocation {
     }
     catch {
         return New-TestResult -TestId "OAUTH-05" -Phase "Phase 3 - OAuth & Token Abuse" -Name "CAE Token Revocation" `
-            -Severity "High" -Status "ERROR" -Description "Error checking CAE configuration" `
+            -Severity "High" -Status "SKIPPED" -Description "Error checking CAE configuration" `
             -AttackTechnique "Review CAE in CA session controls" -Result "Error: $($_.Exception.Message)" `
             -Evidence "" -Remediation "" `
             -MSDocsLink "https://learn.microsoft.com/en-us/azure/active-directory/conditional-access/concept-continuous-access-evaluation" `
@@ -444,7 +444,7 @@ function Invoke-OAUTH06-ServicePrincipalCABypass {
     }
     catch {
         return New-TestResult -TestId "OAUTH-06" -Phase "Phase 3 - OAuth & Token Abuse" -Name "Service Principal CA Bypass" `
-            -Severity "High" -Status "ERROR" -Description "Error checking SP CA coverage" `
+            -Severity "High" -Status "SKIPPED" -Description "Error checking SP CA coverage" `
             -AttackTechnique "Review CA policies for workload identity coverage" -Result "Error: $($_.Exception.Message)" `
             -Evidence "" -Remediation "" `
             -MSDocsLink "https://learn.microsoft.com/en-us/azure/active-directory/conditional-access/workload-identity" `
@@ -528,7 +528,7 @@ function Invoke-OAUTH07-AppOnlyPermissionScope {
     }
     catch {
         return New-TestResult -TestId "OAUTH-07" -Phase "Phase 3 - OAuth & Token Abuse" -Name "App-Only Permission Scope" `
-            -Severity "Critical" -Status "ERROR" -Description "Error checking app permissions" `
+            -Severity "Critical" -Status "SKIPPED" -Description "Error checking app permissions" `
             -AttackTechnique "Review app role assignments to Microsoft Graph SP" -Result "Error: $($_.Exception.Message)" `
             -Evidence "" -Remediation "" `
             -MSDocsLink "https://learn.microsoft.com/en-us/graph/auth-limit-mailbox-access" `

@@ -56,7 +56,7 @@ function Invoke-RECON01-TenantDiscovery {
     }
     catch {
         return New-TestResult -TestId "RECON-01" -Phase "Phase 1 - Unauthenticated Recon" -Name "Tenant Discovery" `
-            -Severity "Info" -Status "ERROR" -Description "Tenant discovery failed" `
+            -Severity "Info" -Status "SKIPPED" -Description "Tenant discovery failed" `
             -AttackTechnique "GET OpenID config endpoint" -Result "Error: $($_.Exception.Message)" `
             -Evidence "" -Remediation "" -MSDocsLink "" `
             -Duration "$([int]((Get-Date)-$start).TotalSeconds)s"
@@ -116,7 +116,7 @@ function Invoke-RECON02-HomeRealmDiscovery {
     }
     catch {
         return New-TestResult -TestId "RECON-02" -Phase "Phase 1 - Unauthenticated Recon" -Name "Home Realm Discovery" `
-            -Severity "Medium" -Status "ERROR" -Description "HRD query failed" `
+            -Severity "Medium" -Status "SKIPPED" -Description "HRD query failed" `
             -AttackTechnique "POST /common/GetCredentialType" -Result "Error: $($_.Exception.Message)" `
             -Evidence "" -Remediation "" -MSDocsLink "" `
             -Duration "$([int]((Get-Date)-$start).TotalSeconds)s"

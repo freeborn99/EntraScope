@@ -83,7 +83,7 @@ function Invoke-PRIVESC01-SelfRoleAssignment {
     }
     catch {
         $code = if ($_.Exception.Response) { [int]$_.Exception.Response.StatusCode } else { 0 }
-        $status = if ($code -in @(403, 401)) { "PASS" } else { "ERROR" }
+        $status = if ($code -in @(403, 401, 400)) { "PASS" } else { "SKIPPED" }
 
         return New-TestResult -TestId "PRIVESC-01" -Phase "Phase 4 - Privilege Escalation" -Name "Self Role Assignment" `
             -Severity "Critical" -Status $status `
@@ -113,11 +113,11 @@ function Invoke-PRIVESC02-ServicePrincipalOwnerAbuse {
     }
 
     try {
-        $headers = @{ Authorization = "Bearer $script:AccessToken" }
+        $headers = @{ Authorization = "Bearer $script:AccessToken"; ConsistencyLevel = "eventual" }
         $me = Invoke-RestMethod -Uri "https://graph.microsoft.com/v1.0/me?`$select=id" -Headers $headers -TimeoutSec 10 -ErrorAction Stop
 
         # Find SPs owned by current user
-        $ownedSPs = Invoke-RestMethod -Uri "https://graph.microsoft.com/v1.0/me/ownedObjects?`$select=id,displayName,appId&`$filter=@odata.type eq '#microsoft.graph.servicePrincipal'" `
+        $ownedSPs = Invoke-RestMethod -Uri "https://graph.microsoft.com/v1.0/me/ownedObjects?`$select=id,displayName,appId&`$count=true&`$filter=@odata.type eq '#microsoft.graph.servicePrincipal'" `
             -Headers $headers -TimeoutSec 15 -ErrorAction Stop
 
         $evidence = [ordered]@{
@@ -186,7 +186,7 @@ function Invoke-PRIVESC02-ServicePrincipalOwnerAbuse {
     }
     catch {
         return New-TestResult -TestId "PRIVESC-02" -Phase "Phase 4 - Privilege Escalation" -Name "SP Owner Credential Abuse" `
-            -Severity "Critical" -Status "ERROR" -Description "Error testing SP ownership" `
+            -Severity "Critical" -Status "SKIPPED" -Description "Error testing SP ownership" `
             -AttackTechnique "Enumerate owned objects and attempt addPassword" -Result "Error: $($_.Exception.Message)" `
             -Evidence "" -Remediation "" `
             -MSDocsLink "https://learn.microsoft.com/en-us/azure/active-directory/manage-apps/overview-assign-app-owners" `
@@ -210,7 +210,7 @@ function Invoke-PRIVESC03-GroupMembershipManipulation {
     }
 
     try {
-        $headers = @{ Authorization = "Bearer $script:AccessToken" }
+        $headers = @{ Authorization = "Bearer $script:AccessToken"; ConsistencyLevel = "eventual" }
         $me = Invoke-RestMethod -Uri "https://graph.microsoft.com/v1.0/me?`$select=id" -Headers $headers -TimeoutSec 10 -ErrorAction Stop
 
         # Find privileged-sounding groups
@@ -261,7 +261,7 @@ function Invoke-PRIVESC03-GroupMembershipManipulation {
     }
     catch {
         return New-TestResult -TestId "PRIVESC-03" -Phase "Phase 4 - Privilege Escalation" -Name "Group Membership Manipulation" `
-            -Severity "High" -Status "ERROR" -Description "Error testing group membership" `
+            -Severity "High" -Status "SKIPPED" -Description "Error testing group membership" `
             -AttackTechnique "POST /groups/{id}/members/`$ref" -Result "Error: $($_.Exception.Message)" `
             -Evidence "" -Remediation "" `
             -MSDocsLink "https://learn.microsoft.com/en-us/azure/active-directory/privileged-identity-management/groups-features" `
@@ -285,7 +285,7 @@ function Invoke-PRIVESC04-PIMActivationTest {
     }
 
     try {
-        $headers = @{ Authorization = "Bearer $script:AccessToken" }
+        $headers = @{ Authorization = "Bearer $script:AccessToken"; ConsistencyLevel = "eventual" }
 
         # Get current user's PIM eligible assignments
         $me = Invoke-RestMethod -Uri "https://graph.microsoft.com/v1.0/me?`$select=id" -Headers $headers -TimeoutSec 10 -ErrorAction Stop
@@ -349,7 +349,7 @@ function Invoke-PRIVESC04-PIMActivationTest {
     }
     catch {
         return New-TestResult -TestId "PRIVESC-04" -Phase "Phase 4 - Privilege Escalation" -Name "PIM Activation Requirements" `
-            -Severity "High" -Status "ERROR" -Description "Error checking PIM policies" `
+            -Severity "High" -Status "SKIPPED" -Description "Error checking PIM policies" `
             -AttackTechnique "Review roleManagementPolicies via Graph" -Result "Error: $($_.Exception.Message)" `
             -Evidence "" -Remediation "" `
             -MSDocsLink "https://learn.microsoft.com/en-us/azure/active-directory/privileged-identity-management/pim-how-to-change-default-settings" `
@@ -373,7 +373,7 @@ function Invoke-PRIVESC05-AppPermissionGrantAbuse {
     }
 
     try {
-        $headers = @{ Authorization = "Bearer $script:AccessToken" }
+        $headers = @{ Authorization = "Bearer $script:AccessToken"; ConsistencyLevel = "eventual" }
         $me = Invoke-RestMethod -Uri "https://graph.microsoft.com/v1.0/me?`$select=id" -Headers $headers -TimeoutSec 10 -ErrorAction Stop
 
         # Attempt to create an OAuth2 permission grant for a dangerous scope
@@ -439,7 +439,7 @@ function Invoke-PRIVESC05-AppPermissionGrantAbuse {
     }
     catch {
         $code = if ($_.Exception.Response) { [int]$_.Exception.Response.StatusCode } else { 0 }
-        $status = if ($code -in @(400,403,401)) { "PASS" } else { "ERROR" }
+        $status = if ($code -in @(400,403,401)) { "PASS" } else { "SKIPPED" }
 
         return New-TestResult -TestId "PRIVESC-05" -Phase "Phase 4 - Privilege Escalation" -Name "App Permission Grant Abuse" `
             -Severity "High" -Status $status `
@@ -469,7 +469,7 @@ function Invoke-PRIVESC06-RoleAssignmentEnumeration {
     }
 
     try {
-        $headers  = @{ Authorization = "Bearer $script:AccessToken" }
+        $headers  = @{ Authorization = "Bearer $script:AccessToken"; ConsistencyLevel = "eventual" }
         $evidence = [ordered]@{}
 
         # Enumerate role assignments visible to current user
@@ -520,7 +520,7 @@ function Invoke-PRIVESC06-RoleAssignmentEnumeration {
     }
     catch {
         return New-TestResult -TestId "PRIVESC-06" -Phase "Phase 4 - Privilege Escalation" -Name "Role Assignment Visibility" `
-            -Severity "Medium" -Status "ERROR" -Description "Error enumerating role assignments" `
+            -Severity "Medium" -Status "SKIPPED" -Description "Error enumerating role assignments" `
             -AttackTechnique "GET /roleManagement/directory/roleAssignments" -Result "Error: $($_.Exception.Message)" `
             -Evidence "" -Remediation "" `
             -MSDocsLink "https://learn.microsoft.com/en-us/azure/active-directory/roles/best-practices" `

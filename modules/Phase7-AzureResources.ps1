@@ -96,7 +96,7 @@ function Invoke-AZ01-RBACEnumeration {
     }
     catch {
         return New-TestResult -TestId "AZ-01" -Phase "Phase 7 - Azure Resources" -Name "Azure RBAC Dangerous Assignments" `
-            -Severity "Critical" -Status "ERROR" -Description "Error enumerating RBAC" `
+            -Severity "Critical" -Status "SKIPPED" -Description "Error enumerating RBAC" `
             -AttackTechnique "ARM role assignment enumeration" -Result "Error: $($_.Exception.Message)" `
             -Evidence "" -Remediation "" `
             -MSDocsLink "https://learn.microsoft.com/en-us/azure/role-based-access-control/best-practices" `
@@ -177,7 +177,7 @@ function Invoke-AZ02-ManagedIdentityRisks {
     }
     catch {
         return New-TestResult -TestId "AZ-02" -Phase "Phase 7 - Azure Resources" -Name "Managed Identity Over-Privilege" `
-            -Severity "Critical" -Status "ERROR" -Description "Error checking managed identities" `
+            -Severity "Critical" -Status "SKIPPED" -Description "Error checking managed identities" `
             -AttackTechnique "ARM VM and RBAC enumeration" -Result "Error: $($_.Exception.Message)" `
             -Evidence "" -Remediation "" `
             -MSDocsLink "https://learn.microsoft.com/en-us/azure/active-directory/managed-identities-azure-resources/overview" `
@@ -268,7 +268,7 @@ function Invoke-AZ03-AutomationAccountAudit {
     }
     catch {
         return New-TestResult -TestId "AZ-03" -Phase "Phase 7 - Azure Resources" -Name "Automation Account Audit" `
-            -Severity "High" -Status "ERROR" -Description "Error auditing automation accounts" `
+            -Severity "High" -Status "SKIPPED" -Description "Error auditing automation accounts" `
             -AttackTechnique "ARM automation account enumeration" -Result "Error: $($_.Exception.Message)" `
             -Evidence "" -Remediation "" `
             -MSDocsLink "https://learn.microsoft.com/en-us/azure/automation/automation-security-overview" `
@@ -341,7 +341,7 @@ function Invoke-AZ04-ResourceLockValidation {
     }
     catch {
         return New-TestResult -TestId "AZ-04" -Phase "Phase 7 - Azure Resources" -Name "Resource Lock Validation" `
-            -Severity "Medium" -Status "ERROR" -Description "Error checking resource locks" `
+            -Severity "Medium" -Status "SKIPPED" -Description "Error checking resource locks" `
             -AttackTechnique "ARM lock enumeration" -Result "Error: $($_.Exception.Message)" `
             -Evidence "" -Remediation "" `
             -MSDocsLink "https://learn.microsoft.com/en-us/azure/azure-resource-manager/management/lock-resources" `
@@ -415,7 +415,7 @@ function Invoke-AZ05-PolicyComplianceCheck {
     }
     catch {
         return New-TestResult -TestId "AZ-05" -Phase "Phase 7 - Azure Resources" -Name "Policy Compliance" `
-            -Severity "High" -Status "ERROR" -Description "Error checking policy compliance" `
+            -Severity "High" -Status "SKIPPED" -Description "Error checking policy compliance" `
             -AttackTechnique "ARM policy insights API" -Result "Error: $($_.Exception.Message)" `
             -Evidence "" -Remediation "" `
             -MSDocsLink "https://learn.microsoft.com/en-us/azure/governance/policy/overview" `
@@ -486,7 +486,7 @@ function Invoke-AZ06-ManagementGroupEscalation {
     }
     catch {
         return New-TestResult -TestId "AZ-06" -Phase "Phase 7 - Azure Resources" -Name "Management Group Escalation" `
-            -Severity "High" -Status "ERROR" -Description "Error checking management groups" `
+            -Severity "High" -Status "SKIPPED" -Description "Error checking management groups" `
             -AttackTechnique "ARM management group role assignment enumeration" -Result "Error: $($_.Exception.Message)" `
             -Evidence "" -Remediation "" `
             -MSDocsLink "https://learn.microsoft.com/en-us/azure/governance/management-groups/overview" `

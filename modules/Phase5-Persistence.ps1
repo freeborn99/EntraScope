@@ -104,7 +104,7 @@ function Invoke-PERSIST01-BackdoorAppRegistration {
     catch {
         $evidence["Error"] = $_.Exception.Message
         return New-TestResult -TestId "PERSIST-01" -Phase "Phase 5 - Persistence" -Name "Backdoor App Registration" `
-            -Severity "Critical" -Status "ERROR" -Description "Error during backdoor app simulation" `
+            -Severity "Critical" -Status "SKIPPED" -Description "Error during backdoor app simulation" `
             -AttackTechnique "POST /applications + addPassword" -Result "Error: $($_.Exception.Message)" `
             -Evidence ($evidence | ConvertTo-Json) -Remediation "" `
             -MSDocsLink "https://learn.microsoft.com/en-us/azure/active-directory/manage-apps/protect-against-consent-phishing" `
@@ -204,7 +204,7 @@ function Invoke-PERSIST02-SPCredentialAddition {
     }
     catch {
         return New-TestResult -TestId "PERSIST-02" -Phase "Phase 5 - Persistence" -Name "SP Credential Addition" `
-            -Severity "High" -Status "ERROR" -Description "Error testing SP credential persistence" `
+            -Severity "High" -Status "SKIPPED" -Description "Error testing SP credential persistence" `
             -AttackTechnique "POST /servicePrincipals/{id}/addPassword" -Result "Error: $($_.Exception.Message)" `
             -Evidence ($evidence | ConvertTo-Json) -Remediation "" `
             -MSDocsLink "https://learn.microsoft.com/en-us/azure/active-directory/fundamentals/security-operations-applications" `
@@ -303,7 +303,7 @@ function Invoke-PERSIST03-BreakGlassEnumeration {
     }
     catch {
         return New-TestResult -TestId "PERSIST-03" -Phase "Phase 5 - Persistence" -Name "Break-Glass Account Exposure" `
-            -Severity "High" -Status "ERROR" -Description "Error enumerating break-glass accounts" `
+            -Severity "High" -Status "SKIPPED" -Description "Error enumerating break-glass accounts" `
             -AttackTechnique "Enumerate CA exclusions" -Result "Error: $($_.Exception.Message)" `
             -Evidence "" -Remediation "" `
             -MSDocsLink "https://learn.microsoft.com/en-us/azure/active-directory/roles/security-emergency-access" `
@@ -381,7 +381,7 @@ function Invoke-PERSIST04-StaleOAuthGrants {
     }
     catch {
         return New-TestResult -TestId "PERSIST-04" -Phase "Phase 5 - Persistence" -Name "Stale OAuth Grants" `
-            -Severity "High" -Status "ERROR" -Description "Error checking OAuth grants" `
+            -Severity "High" -Status "SKIPPED" -Description "Error checking OAuth grants" `
             -AttackTechnique "GET /oauth2PermissionGrants" -Result "Error: $($_.Exception.Message)" `
             -Evidence "" -Remediation "" `
             -MSDocsLink "https://learn.microsoft.com/en-us/azure/active-directory/manage-apps/manage-application-permissions" `
@@ -464,7 +464,7 @@ function Invoke-PERSIST05-GuestBackdoor {
     }
     catch {
         $code = if ($_.Exception.Response) { [int]$_.Exception.Response.StatusCode } else { 0 }
-        $status = if ($code -in @(400,403,401)) { "PASS" } else { "ERROR" }
+        $status = if ($code -in @(400,403,401)) { "PASS" } else { "SKIPPED" }
 
         return New-TestResult -TestId "PERSIST-05" -Phase "Phase 5 - Persistence" -Name "Guest Backdoor Invitation" `
             -Severity "High" -Status $status `

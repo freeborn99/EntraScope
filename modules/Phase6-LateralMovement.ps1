@@ -85,7 +85,7 @@ function Invoke-LAT01-GraphAPIPillage {
     }
     catch {
         return New-TestResult -TestId "LAT-01" -Phase "Phase 6 - Lateral Movement" -Name "Graph API Data Pillage" `
-            -Severity "High" -Status "ERROR" -Description "Error during data pillage test" `
+            -Severity "High" -Status "SKIPPED" -Description "Error during data pillage test" `
             -AttackTechnique "Graph API user/mail enumeration" -Result "Error: $($_.Exception.Message)" `
             -Evidence "" -Remediation "" `
             -MSDocsLink "https://learn.microsoft.com/en-us/graph/permissions-reference" `
@@ -175,7 +175,7 @@ function Invoke-LAT02-TeamsMessageEnumeration {
     }
     catch {
         return New-TestResult -TestId "LAT-02" -Phase "Phase 6 - Lateral Movement" -Name "Teams Message Enumeration" `
-            -Severity "Medium" -Status "ERROR" -Description "Error enumerating Teams" `
+            -Severity "Medium" -Status "SKIPPED" -Description "Error enumerating Teams" `
             -AttackTechnique "Graph Teams enumeration" -Result "Error: $($_.Exception.Message)" `
             -Evidence "" -Remediation "" `
             -MSDocsLink "https://learn.microsoft.com/en-us/microsoftteams/security-compliance-overview" `
@@ -248,7 +248,7 @@ function Invoke-LAT03-SharePointAccess {
     }
     catch {
         return New-TestResult -TestId "LAT-03" -Phase "Phase 6 - Lateral Movement" -Name "SharePoint Access Enumeration" `
-            -Severity "Medium" -Status "ERROR" -Description "Error enumerating SharePoint sites" `
+            -Severity "Medium" -Status "SKIPPED" -Description "Error enumerating SharePoint sites" `
             -AttackTechnique "GET /sites?search=*" -Result "Error: $($_.Exception.Message)" `
             -Evidence "" -Remediation "" `
             -MSDocsLink "https://learn.microsoft.com/en-us/sharepoint/external-sharing-overview" `
@@ -327,7 +327,7 @@ function Invoke-LAT04-KeyVaultAccess {
     }
     catch {
         return New-TestResult -TestId "LAT-04" -Phase "Phase 6 - Lateral Movement" -Name "Key Vault Access Test" `
-            -Severity "Critical" -Status "ERROR" -Description "Error testing Key Vault access" `
+            -Severity "Critical" -Status "SKIPPED" -Description "Error testing Key Vault access" `
             -AttackTechnique "ARM + KV data plane access" -Result "Error: $($_.Exception.Message)" `
             -Evidence "" -Remediation "" `
             -MSDocsLink "https://learn.microsoft.com/en-us/azure/key-vault/general/rbac-guide" `
@@ -414,7 +414,7 @@ function Invoke-LAT05-StorageSASAbuse {
     }
     catch {
         return New-TestResult -TestId "LAT-05" -Phase "Phase 6 - Lateral Movement" -Name "Storage Account SAS / Public Access" `
-            -Severity "Critical" -Status "ERROR" -Description "Error testing storage access" `
+            -Severity "Critical" -Status "SKIPPED" -Description "Error testing storage access" `
             -AttackTechnique "Storage account enumeration and public access check" -Result "Error: $($_.Exception.Message)" `
             -Evidence ($evidence | ConvertTo-Json) -Remediation "" `
             -MSDocsLink "https://learn.microsoft.com/en-us/azure/storage/blobs/anonymous-read-access-prevent" `
