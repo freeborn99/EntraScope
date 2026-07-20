@@ -323,6 +323,14 @@ function Handle-Message([string]$raw) {
                 Send-Page (@{ type="status"; value="Idle"; root=$Root } | ConvertTo-Json -Compress)
                 $mfPath = Join-Path $Root "reports\setup-manifest.json"
                 Send-Page (@{ type="manifestExists"; exists=(Test-Path $mfPath) } | ConvertTo-Json -Compress)
+                
+                $latest = Get-ChildItem -Path (Join-Path $Root "reports\EntraScope-*.json") | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+                if ($latest) {
+                    try {
+                        $rdata = Get-Content $latest.FullName -Raw | ConvertFrom-Json
+                        Send-Page (@{ type="scanComplete"; data=$rdata } | ConvertTo-Json -Depth 10 -Compress)
+                    } catch {}
+                }
             }
         "saveConfig" {
             try {
@@ -893,8 +901,8 @@ input[type=checkbox]{accent-color:var(--ac);width:15px;height:15px;cursor:pointe
         </div>
         <div id="setup-status" style="margin-bottom:10px"></div>
         <div class="bgrp" style="justify-content:flex-start">
-          <button class="btn btn-p" id="setup-btn" onclick="requestSetup()">⚡ Auto-Provision Test Objects</button>
-          <button class="btn btn-d" id="cleanup-btn" onclick="requestCleanup()" style="display:none">🗑 Remove Test Objects</button>
+          <button class="btn btn-p" id="setup-btn" onclick="requestSetup()">🔧 Auto-Provision Test Objects</button>
+          <button class="btn btn-d" id="cleanup-btn" onclick="requestCleanup()">🗑 Remove Test Objects</button>
         </div>
       </div>
 
@@ -1277,7 +1285,8 @@ function approveSetup(){
   ps({action:'setupEnv'});
 }
 function requestCleanup(){
-  ps({action:'getSetupManifest'});
+  document.getElementById('cleanup-preview').innerHTML = '<div style="color:var(--warn)">This will search for and remove any objects created by EntraScope (e.g. entrascope-honeypot*).</div>';
+  document.getElementById('cleanup-modal').style.display='flex';
 }
 function approveCleanup(){
   closeModal('cleanup-modal');
@@ -1296,8 +1305,6 @@ function showSetupResult(data){
       html+='</div>';
     }
     el.innerHTML=html;
-    document.getElementById('setup-btn').style.display='none';
-    document.getElementById('cleanup-btn').style.display='';
     document.getElementById('cleanup-btn').disabled=false;
     document.getElementById('cleanup-btn').textContent='🗑 Remove Test Objects';
   } else {
@@ -1310,8 +1317,6 @@ function showCleanupResult(data){
   const el=document.getElementById('setup-status');
   if(data.Success){
     el.innerHTML='<div style="color:var(--ok);font-weight:700;margin-bottom:4px">✅ Cleanup complete: '+data.Removed+' objects removed</div>';
-    document.getElementById('cleanup-btn').style.display='none';
-    document.getElementById('setup-btn').style.display='';
     document.getElementById('setup-btn').disabled=false;
     document.getElementById('setup-btn').textContent='🔧 Setup Test Environment';
   } else {
@@ -1331,8 +1336,6 @@ function showManifestForCleanup(data){
 }
 function checkManifestOnLoad(exists){
   if(exists){
-    document.getElementById('setup-btn').style.display='none';
-    document.getElementById('cleanup-btn').style.display='';
     document.getElementById('setup-status').innerHTML='<div style="color:var(--ok);font-size:.83rem">✅ Test environment is provisioned</div>';
   }
 }
