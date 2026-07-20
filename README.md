@@ -27,7 +27,6 @@ Unlike compliance audit tools that check policy settings, EntraScope **actively 
 
 ### Screenshots
 
-*(Replace these placeholders with your actual screenshots after taking them)*
 
 ![EntraScope Main Dashboard](docs/assets/dashboard.png)  
 
