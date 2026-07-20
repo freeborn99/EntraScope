@@ -327,8 +327,11 @@ function Handle-Message([string]$raw) {
                 $latest = Get-ChildItem -Path (Join-Path $Root "reports\EntraScope-*.json") | Sort-Object LastWriteTime -Descending | Select-Object -First 1
                 if ($latest) {
                     try {
-                        $rdata = Get-Content $latest.FullName -Raw | ConvertFrom-Json
-                        Send-Page (@{ type="scanComplete"; data=$rdata } | ConvertTo-Json -Depth 10 -Compress)
+                        $rdata = (Get-Content $latest.FullName -Raw | ConvertFrom-Json).Results
+                        Send-Page (@{ type="results"; data=$rdata } | ConvertTo-Json -Depth 10 -Compress)
+                        Send-Page (@{ type="toast"; kind="success"; message="Loaded latest report" } | ConvertTo-Json -Compress)
+                        # Switch back to dashboard after results switches to 'res'
+                        Send-Page (@{ type="nav"; target="dash" } | ConvertTo-Json -Compress)
                     } catch {}
                 }
             }
@@ -436,14 +439,42 @@ function Handle-Message([string]$raw) {
             $rs.ApartmentState = "MTA"; $rs.Open()
             $rs.SessionStateProxy.SetVariable("sync", $script:sync)
             $rs.SessionStateProxy.SetVariable("Root", $Root)
-            $rs.SessionStateProxy.SetVariable("AccessToken", $script:AccessToken)
+            $rs.SessionStateProxy.SetVariable("existingToken", $script:AccessToken)
             $ps = [powershell]::Create(); $ps.Runspace = $rs
             $null = $ps.AddScript({
                 try {
                     function Write-EntraLog { param([string]$Message,[string]$Level="Info"); $sync.LogQueue.Enqueue("$Level`t$Message") }
-                    $script:AccessToken = $AccessToken
-                    if (-not $script:AccessToken) { throw "Not authenticated. Session token missing." }
-                    Write-EntraLog "Starting cleanup using existing session..." Info
+                    $cfgPath = Join-Path $Root "config\scope.json"
+                    if (Test-Path $cfgPath) { $script:Config = Get-Content $cfgPath -Raw | ConvertFrom-Json }
+                    $tid = $script:Config.TenantId
+                    if (-not $tid -and $script:Config.TenantDomain) {
+                        try {
+                            $oidc = Invoke-RestMethod ("https://login.microsoftonline.com/" + $script:Config.TenantDomain + "/.well-known/openid-configuration") -TimeoutSec 10
+                            $tid = $oidc.issuer -replace ".*/([0-9a-f-]{36})/.*",'$1'
+                            $script:Config.TenantId = $tid
+                        } catch {}
+                    }
+                    if (-not $tid) { throw "Could not resolve Tenant ID. Please check Tenant Domain in Config." }
+                    
+                    $script:AccessToken = $existingToken
+                    if (-not $script:AccessToken) {
+                        Write-EntraLog "Authenticating for cleanup (requires Global Admin)..." Info
+                        $sync.AuthPopupClosed = $false
+                        $sync.AccessToken = $null
+                        $sync.RefreshToken = $null
+                        $sync.AuthError = $null
+                        $sync.LogQueue.Enqueue("REQ_INTERACTIVE_AUTH`t$tid")
+                        while (-not $sync.AuthPopupClosed -and -not $sync.Cancel) { Start-Sleep 1 }
+                        if ($sync.AuthError) { throw "Auth failed: $($sync.AuthError)" }
+                        if ($sync.AccessToken) {
+                            $script:AccessToken = $sync.AccessToken
+                            $sync.LogQueue.Enqueue("SAVE_TOKEN`t" + $script:AccessToken)
+                            Write-EntraLog "Authentication successful" Success
+                        }
+                        if (-not $script:AccessToken) { throw "Authentication cancelled or timed out" }
+                    } else {
+                        Write-EntraLog "Reusing existing session for cleanup..." Info
+                    }
                     $setupModule = Join-Path $Root "modules\SetupTestEnvironment.ps1"
                     if (Test-Path $setupModule) { . $setupModule }
                     $result = Remove-EntraScopeTestEnvironment
@@ -1261,6 +1292,7 @@ window.chrome.webview.addEventListener('message',ev=>{
     case 'cleanupResult': showCleanupResult(m.data); break;
     case 'manifestForCleanup': showManifestForCleanup(m.data); break;
     case 'manifestExists': checkManifestOnLoad(m.exists); break;
+    case 'nav': nav(m.target); break;
   }
 });
 
