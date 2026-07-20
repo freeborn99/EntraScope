@@ -106,7 +106,7 @@ The test account simulates a **compromised standard employee**. EntraScope uses 
 
 This account **is signed into** during testing, so it needs:
 - A valid password you control
-- MFA registered (to authenticate interactively or via Device Code)
+- MFA registered (to authenticate via the Interactive Login Web Popup)
 - Minimal permissions — no admin roles, no sensitive group memberships
 
 ### Minimum Requirements
@@ -114,7 +114,7 @@ This account **is signed into** during testing, so it needs:
 - **Cloud-only account** (not synced)
 - **No admin roles** — it should look like a standard employee
 - **No access to sensitive data** — do not add it to privileged groups, HR SharePoint sites, executive Teams channels, etc.
-- **MFA registered** using Microsoft Authenticator (needed to complete Device Code authentication in EntraScope)
+- **MFA registered** using Microsoft Authenticator (needed to authenticate interactively in EntraScope)
 - Assigned a **Microsoft 365 E3 or E5 license** (or any license that includes Exchange Online + Teams) so Phase 6 tests have realistic services to probe
 - Named clearly so you recognise it in logs: e.g. `svc-pentest-lowpriv@yourdomain.com`
 
@@ -161,7 +161,7 @@ Write-Host "Created: $($user.UserPrincipalName)  |  ID: $($user.Id)"
 
 ### Register MFA on the Test Account
 
-The test account needs MFA to authenticate via Device Code flow:
+The test account needs MFA to authenticate via the interactive web popup flow:
 
 1. Sign in to [https://aka.ms/mfasetup](https://aka.ms/mfasetup) **as the test account**
 2. Add **Microsoft Authenticator** as the primary method

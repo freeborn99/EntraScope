@@ -119,8 +119,8 @@ Honeypot accounts are **dedicated decoy accounts** that credential tests fire ba
 
 **Option A: Auto-Provision (Recommended)**
 1. Go to the **⚙️ Configure** tab.
-2. In the "Test Environment Setup" card, click **⚡ Auto-Provision Test Objects**.
-3. Authenticate as a Global Administrator when prompted via the Device Code flow. EntraScope will automatically create the honeypot accounts and a test app for you.
+2. In the "Test Environment Setup" card, click **🔧 Auto-Provision Test Objects**.
+3. Authenticate as a Global Administrator when prompted via the Interactive Web Popup. EntraScope will automatically create the honeypot accounts and a test app for you.
 4. When you are finished with all your testing, you can click **🗑 Remove Test Objects** to clean up the environment.
 
 **Option B: Manual Setup**
@@ -135,9 +135,9 @@ Once created manually, add them in **🔧 Configure → Honeypot Accounts**.
 Click **▶️ Run Scan**:
 
 1. Choose authentication method:
-   - **Interactive** — browser popup (recommended for first run)
-   - **Device Code** — enter a code on another device (good for headless)
+   - **Sign In (Web Popup)** — opens a browser window to authenticate
    - **Service Principal** — Client ID + Secret (good for CI/CD)
+   - **Recon Only** — no authentication (runs Phase 1 only)
 
 2. Select which phases to run (or leave all selected)
 
@@ -155,10 +155,10 @@ EntraScope is designed to test with **the minimum permissions an attacker would 
 
 | Scenario | What to use | Permissions |
 |---|---|---|
-| External recon only (Phase 1) | No auth | None |
-| Full tenant test | Interactive / Device Code as a **Global Reader** | `Directory.Read.All`, `AuditLog.Read.All`, `Policy.Read.All` |
-| Privileged tests (Phase 4–5) | Interactive as **Global Reader** | As above — attempts will fail (PASS) or succeed (FAIL) |
-| Azure resource tests (Phase 7) | Interactive with ARM scope | `Reader` on subscriptions |
+| External recon only (Phase 1) | Recon Only | None |
+| Full tenant test | Sign In (Web Popup) as a **Global Reader** | `Directory.Read.All`, `AuditLog.Read.All`, `Policy.Read.All` |
+| Privileged tests (Phase 4–5) | Sign In (Web Popup) as **Global Reader** | As above — attempts will fail (PASS) or succeed (FAIL) |
+| Azure resource tests (Phase 7) | Sign In (Web Popup) with ARM scope | `Reader` on subscriptions |
 
 > [!NOTE]
 > EntraScope deliberately uses the same OAuth client IDs that real attackers use (Azure CLI, Microsoft Office) so the tests are realistic. You will see these client IDs in your sign-in logs during a scan.
