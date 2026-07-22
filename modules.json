@@ -1,0 +1,10 @@
+[
+  {
+    "Name": "Tenant Isolation Bypass",
+    "Description": "Tests for cross-tenant data leakage and guest enumeration vulnerabilities in multi-tenant B2B configurations.",
+    "Author": "EntraScope Community",
+    "Version": "1.0.0",
+    "FileName": "Phase9-TenantIsolation.ps1",
+    "DownloadUrl": "https://raw.githubusercontent.com/notmy/EntraScope/beta/custom_modules/Phase9-TenantIsolation.ps1"
+  }
+]

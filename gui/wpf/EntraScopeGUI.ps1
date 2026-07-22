@@ -11,6 +11,7 @@ param(
     [string]$Root    = (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent),
     [string]$LibPath = "$PSScriptRoot\lib"
 )
+[System.Environment]::SetEnvironmentVariable("WEBVIEW2_USER_DATA_FOLDER", (Join-Path $env:TEMP "EntraScope_WebView2_$PID"))
 $ErrorActionPreference = "Stop"
 
 # ─── 0. STA CHECK ─────────────────────────────────────────────────────────────
@@ -93,6 +94,7 @@ function Start-Scan([object]$params) {
     $phases     = if ($params.phases)      { $params.phases }      else { @(1,2,3,4,5,6,7,8) }
     $authMethod = if ($params.authMethod)  { $params.authMethod }  else { "Interactive" }
     $dryRun     = [bool]($params.dryRun)
+    $autoProv   = if ($null -ne $params.autoProv) { [bool]$params.autoProv } else { $false }
     $clientId   = if ($params.clientId)   { $params.clientId }    else { "" }
     $clientSec  = if ($params.clientSecret){ $params.clientSecret } else { "" }
 
@@ -104,6 +106,7 @@ function Start-Scan([object]$params) {
     $rs.SessionStateProxy.SetVariable("phases",     $phases)
     $rs.SessionStateProxy.SetVariable("authMethod", $authMethod)
     $rs.SessionStateProxy.SetVariable("dryRun",     $dryRun)
+    $rs.SessionStateProxy.SetVariable("autoProv",   $autoProv)
     $rs.SessionStateProxy.SetVariable("clientId",   $clientId)
     $rs.SessionStateProxy.SetVariable("clientSec",  $clientSec)
     $rs.SessionStateProxy.SetVariable("existingToken", $script:AccessToken)
@@ -278,7 +281,21 @@ function Start-Scan([object]$params) {
                     }
                 }
             } else {
-                Write-EntraLog "DRY RUN — no live API calls" Warn
+                Write-EntraLog "DRY RUN - no live API calls" Warn
+            }
+
+            # Auto-Provision Test Environment
+            if ($autoProv -and -not $dryRun) {
+                $setupModule = Join-Path $Root "modules\SetupTestEnvironment.ps1"
+                if (Test-Path $setupModule) {
+                    . $setupModule
+                    Write-EntraLog "Auto-Provisioning Test Environment..." Info
+                    try {
+                        $null = New-EntraScopeTestEnvironment
+                    } catch {
+                        Write-EntraLog "Auto-provisioning failed: $($_.Exception.Message)" Warn
+                    }
+                }
             }
 
             $total = @($phases).Count; $i = 0
@@ -297,9 +314,29 @@ function Start-Scan([object]$params) {
                         if ($r) { $r | ForEach-Object { $sync.Results.Add($_) } }
                     } catch { Write-EntraLog "Phase $nStr error: $($_.Exception.Message)" Error }
                 } else {
-                    Write-EntraLog "Phase $nStr module not found — skipping" Warn
+                    Write-EntraLog "Phase $nStr module not found - skipping" Warn
                 }
             }
+
+            # Auto-Cleanup Test Environment
+            $cfgPath = Join-Path $Root "config\scope.json"
+            $doCleanup = $false
+            if (Test-Path $cfgPath) {
+                try { $cfg = Get-Content $cfgPath -Raw | ConvertFrom-Json; if ($cfg.Options.CleanupAfterTest) { $doCleanup = $true } } catch {}
+            }
+            if ($doCleanup -and -not $dryRun) {
+                $setupModule = Join-Path $Root "modules\SetupTestEnvironment.ps1"
+                if (Test-Path $setupModule) {
+                    . $setupModule
+                    Write-EntraLog "Auto-Cleaning Test Environment..." Info
+                    try {
+                        $null = Remove-EntraScopeTestEnvironment
+                    } catch {
+                        Write-EntraLog "Auto-cleanup failed: $($_.Exception.Message)" Warn
+                    }
+                }
+            }
+
             $sync.Status = "Done"
             $sync.LogQueue.Enqueue("SCAN_DONE`t")
         } catch {
@@ -373,6 +410,46 @@ function Handle-Message([string]$raw) {
             $dlg.Filter = "JSON (*.json)|*.json|All (*.*)|*.*"; $dlg.Title = "Select scope.json"
             if ($dlg.ShowDialog() -eq "OK") {
                 Send-Page (@{ type="configPath"; path=$dlg.FileName } | ConvertTo-Json -Compress)
+            }
+        }
+        "fetchExtensions" {
+            try {
+                # In the future, this will point to raw.githubusercontent.com/.../beta/modules.json
+                # For now, we return a mock array to prove the UI works.
+                $mockData = @(
+                    @{
+                        Name = "Tenant Isolation Bypass"
+                        Description = "Tests for cross-tenant data leakage in multi-tenant B2B configurations."
+                        Author = "Community"
+                        Version = "1.0.0"
+                        FileName = "Phase9-TenantIsolation.ps1"
+                        DownloadUrl = "https://example.com/Phase9-TenantIsolation.ps1"
+                    }
+                )
+                Send-Page (@{ type="extensionsData"; data=$mockData } | ConvertTo-Json -Compress)
+            } catch {
+                Send-Page (@{ type="toast"; message="Failed to fetch extensions: $($_.Exception.Message)"; kind="error" } | ConvertTo-Json -Compress)
+            }
+        }
+        "installExtension" {
+            try {
+                $customDir = Join-Path $Root "custom_modules"
+                if (-not (Test-Path $customDir)) { New-Item -ItemType Directory -Path $customDir -Force | Out-Null }
+                
+                $destFile = Join-Path $customDir $msg.name
+                
+                # Mock download for the proof of concept
+                $mockScript = @"
+function Invoke-Phase9 {
+    Write-EntraLog "Executing custom module: $($msg.name)" -Level Info
+    return New-TestResult -TestId "CUST-01" -Phase "Phase 9 - Custom Modules" -Name "Custom Module Execution" -Severity "Info" -Status "PASS" -Description "Executed successfully from custom_modules" -AttackTechnique "N/A" -Result "Success" -Evidence "" -Remediation "" -MSDocsLink "" -Duration "1s"
+}
+"@
+                $mockScript | Set-Content $destFile -Encoding UTF8
+                
+                Send-Page (@{ type="toast"; message="Successfully installed $($msg.name)"; kind="success" } | ConvertTo-Json -Compress)
+            } catch {
+                Send-Page (@{ type="toast"; message="Install failed: $($_.Exception.Message)"; kind="error" } | ConvertTo-Json -Compress)
             }
         }
         "clearLog" { Send-Page (@{ type="clearLog" } | ConvertTo-Json -Compress) }
@@ -826,9 +903,10 @@ input[type=checkbox]{accent-color:var(--ac);width:15px;height:15px;cursor:pointe
   <button class="nb on" id="nb-dash" onclick="nav('dash')" title="">🏠<span class="tip">Dashboard</span></button>
   <button class="nb" id="nb-cfg"  onclick="nav('cfg')"  title="">⚙️<span class="tip">Configure</span></button>
   <button class="nb" id="nb-run"  onclick="nav('run')"  title="">▶️<span class="tip">Run Scan</span></button>
+  <button class="nb" id="nb-ext"  onclick="nav('ext')"  title="">🧩<span class="tip">Extensions</span></button>
   <button class="nb" id="nb-res"  onclick="nav('res')"  title="">📊<span class="tip">Results</span></button>
   <button class="nb" id="nb-log"  onclick="nav('log')"  title="">💻<span class="tip">Full Log</span></button>
-  <div class="sb-bot">v1.0</div>
+  <div class="sb-bot">v1.0-beta</div>
 </nav>
 
 <!-- MAIN -->
@@ -1007,6 +1085,10 @@ input[type=checkbox]{accent-color:var(--ac);width:15px;height:15px;cursor:pointe
           </label>
         </div>
         <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--bdr)">
+          <label class="trow">
+            <input type="checkbox" id="r-auto" checked/>
+            <span style="font-size:.83rem;font-weight:600">Auto-Provision Test Environment (Requires Global Admin)</span>
+          </label>
         </div>
       </div>
       <div class="acbox" id="acbox">
@@ -1055,6 +1137,20 @@ input[type=checkbox]{accent-color:var(--ac);width:15px;height:15px;cursor:pointe
           </div>
         </div>
         <div class="term" id="flog" style="height:calc(100vh - 190px)"></div>
+      </div>
+    </div>
+
+    <!-- EXTENSIONS -->
+    <div class="view" id="v-ext">
+      <div class="card" style="padding:16px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+          <div>
+            <h2 style="margin:0;color:var(--tx)">Module Marketplace</h2>
+            <div style="color:var(--dim);font-size:0.85rem;margin-top:4px">Install new community modules from GitHub</div>
+          </div>
+          <button class="btn btn-p" onclick="ps({action:'fetchExtensions'})">🔄 Refresh Modules</button>
+        </div>
+        <div id="ext-list"><div class="no-r">Click Refresh Modules to load available extensions</div></div>
       </div>
     </div>
 
@@ -1147,7 +1243,7 @@ function startScan(){
   try {
     const phases=PH.filter(p=>document.getElementById('pc'+p.n)?.querySelector('input')?.checked).map(p=>p.n);
     if(!phases.length){toast('Select at least one phase','tw');return}
-    ps({action:'startScan',phases,authMethod:G.auth,dryRun:document.getElementById('r-dry').checked,
+    ps({action:'startScan',phases,authMethod:G.auth,dryRun:document.getElementById('r-dry').checked,autoProv:document.getElementById('r-auto').checked,
         clientId:document.getElementById('r-cid').value,
         clientSecret:document.getElementById('r-sec').value});
   } catch (e) {
@@ -1292,6 +1388,7 @@ window.chrome.webview.addEventListener('message',ev=>{
     case 'cleanupResult': showCleanupResult(m.data); break;
     case 'manifestForCleanup': showManifestForCleanup(m.data); break;
     case 'manifestExists': checkManifestOnLoad(m.exists); break;
+    case 'extensionsData': renderExtensions(m.data); break;
     case 'nav': nav(m.target); break;
   }
 });
@@ -1370,6 +1467,28 @@ function checkManifestOnLoad(exists){
   if(exists){
     document.getElementById('setup-status').innerHTML='<div style="color:var(--ok);font-size:.83rem">✅ Test environment is provisioned</div>';
   }
+}
+
+function renderExtensions(mods){
+  const el=document.getElementById('ext-list');
+  if(!mods||!mods.length){el.innerHTML='<div class="no-r">No extensions available at this time.</div>';return}
+  let h='';
+  mods.forEach(m=>{
+    h+=`<div class="card" style="margin-bottom:8px;border-color:var(--bdr);display:flex;align-items:center">
+      <div style="flex:1">
+        <div style="font-weight:700;font-size:1.05rem;color:var(--tx)">${esc(m.Name)}</div>
+        <div style="color:var(--dim);font-size:0.85rem;margin-top:2px">${esc(m.Description)}</div>
+        <div style="display:flex;gap:12px;margin-top:8px">
+          <span style="font-size:0.75rem;background:#1a2a4a;color:var(--ac);padding:2px 8px;border-radius:4px">${esc(m.Author)}</span>
+          <span style="font-size:0.75rem;background:#2a1a2a;color:var(--purple);padding:2px 8px;border-radius:4px">v${esc(m.Version)}</span>
+        </div>
+      </div>
+      <div>
+        <button class="btn btn-p" onclick="ps({action:'installExtension',url:'${esc(m.DownloadUrl)}',name:'${esc(m.FileName)}'})">📥 Install</button>
+      </div>
+    </div>`
+  });
+  el.innerHTML=h;
 }
 
 function ps(obj){window.chrome.webview.postMessage(JSON.stringify(obj))}

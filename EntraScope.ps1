@@ -74,7 +74,9 @@ param(
     [string]$IncludePhases = "",
     [string]$ExcludePhases = "",
     [switch]$NoHybrid,
-    [switch]$Quiet
+    [switch]$Quiet,
+    [switch]$Menu,
+    [switch]$SkipAutoProvision
 )
 
 Set-StrictMode -Version Latest
@@ -335,9 +337,11 @@ function Invoke-Authentication {
             } catch { Write-EntraLog "Could not enumerate subscriptions: $($_.Exception.Message)" -Level Warn }
         }
 
-        # Supplement with config-specified subscriptions
-        if ($script:Config.SubscriptionIds -and $script:Config.SubscriptionIds.Count -gt 0) {
-            $script:DiscoveredSubscriptions = @($script:DiscoveredSubscriptions + $script:Config.SubscriptionIds | Select-Object -Unique)
+        # Supplement with config-specified subscriptions safely to avoid StrictMode errors
+        if ($script:Config.psobject.Properties.Match('SubscriptionIds').Count -gt 0) {
+            if ($script:Config.SubscriptionIds -and $script:Config.SubscriptionIds.Count -gt 0) {
+                $script:DiscoveredSubscriptions = @($script:DiscoveredSubscriptions + $script:Config.SubscriptionIds | Select-Object -Unique)
+            }
         }
 
         # Verify token by calling /me
@@ -705,6 +709,98 @@ function New-JSONReport {
 }
 
 # ─────────────────────────────────────────────────────────────
+#   CLI MENU
+# ─────────────────────────────────────────────────────────────
+function Show-EntraScopeMenu {
+    try { Initialize-Config } catch {}
+    
+    $run = $true
+    while ($run) {
+        Clear-Host
+        Write-Host @"
+
+  ███████╗███╗   ██╗████████╗██████╗  █████╗ ███████╗ ██████╗ ██████╗ ██████╗ ███████╗
+  ██╔════╝████╗  ██║╚══██╔══╝██╔══██╗██╔══██╗██╔════╝██╔════╝██╔═══██╗██╔══██╗██╔════╝
+  █████╗  ██╔██╗ ██║   ██║   ██████╔╝███████║███████╗██║     ██║   ██║██████╔╝█████╗  
+  ██╔══╝  ██║╚██╗██║   ██║   ██╔══██╗██╔══██║╚════██║██║     ██║   ██║██╔═══╝ ██╔══╝  
+  ███████╗██║ ╚████║   ██║   ██║  ██║██║  ██║███████║╚██████╗╚██████╔╝██║     ███████╗
+  ╚══════╝╚═╝  ╚═══╝   ╚═╝   ╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝ ╚═════╝ ╚═════╝ ╚═╝     ╚══════╝
+
+  --- EntraScope CLI Menu ---
+
+  [1] Run Full Security Scan (All Phases)
+  [2] Run Custom Security Scan (Select Phases)
+  [3] Edit Configuration (scope.json)
+  [4] Auto-Provision Test Environment (Honeypot Accounts)
+  [5] Remove Test Environment
+  [0] Exit
+
+"@ -ForegroundColor Cyan
+
+        $choice = Read-Host "Select an option"
+        switch ($choice) {
+            "1" {
+                $script:Phases = "All"
+                Invoke-EntraScope
+                Write-Host "`nPress any key to return to menu..." -ForegroundColor Yellow
+                $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+            }
+            "2" {
+                $customPhases = Read-Host "Enter comma-separated phases (e.g. 1,2,3 or Recon,Cred)"
+                $script:Phases = $customPhases
+                Invoke-EntraScope
+                Write-Host "`nPress any key to return to menu..." -ForegroundColor Yellow
+                $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+            }
+            "3" {
+                if (-not $script:Config) { try { Initialize-Config } catch {} }
+                $currentTenant = if ($script:Config.TenantDomain) { $script:Config.TenantDomain } else { "none" }
+                $newTenant = Read-Host "Enter Tenant Domain [Current: $currentTenant]"
+                if ($newTenant) {
+                    $script:Config.TenantDomain = $newTenant
+                    $script:Config.TenantId = "" # reset to force discovery
+                    $script:Config | ConvertTo-Json -Depth 10 | Set-Content $ConfigFile -Encoding UTF8
+                    Write-Host "Config saved to $ConfigFile" -ForegroundColor Green
+                }
+                Write-Host "`nPress any key to return to menu..." -ForegroundColor Yellow
+                $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+            }
+            "4" {
+                Write-Host "`n--- Provisioning Test Environment ---" -ForegroundColor Cyan
+                try {
+                    Invoke-Authentication
+                    $setupModule = Join-Path $PSScriptRoot "modules\SetupTestEnvironment.ps1"
+                    if (Test-Path $setupModule) { . $setupModule } else { throw "Setup module not found" }
+                    $result = New-EntraScopeTestEnvironment
+                    if ($result.Success) { Write-Host "`nTest Environment Provisioned Successfully" -ForegroundColor Green }
+                } catch {
+                    Write-Host "`nError: $($_.Exception.Message)" -ForegroundColor Red
+                }
+                Write-Host "`nPress any key to return to menu..." -ForegroundColor Yellow
+                $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+            }
+            "5" {
+                Write-Host "`n--- Removing Test Environment ---" -ForegroundColor Cyan
+                try {
+                    Invoke-Authentication
+                    $setupModule = Join-Path $PSScriptRoot "modules\SetupTestEnvironment.ps1"
+                    if (Test-Path $setupModule) { . $setupModule } else { throw "Setup module not found" }
+                    $result = Remove-EntraScopeTestEnvironment
+                    if ($result.Success) { Write-Host "`nTest Environment Removed Successfully" -ForegroundColor Green }
+                } catch {
+                    Write-Host "`nError: $($_.Exception.Message)" -ForegroundColor Red
+                }
+                Write-Host "`nPress any key to return to menu..." -ForegroundColor Yellow
+                $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+            }
+            "0" {
+                $run = $false
+            }
+        }
+    }
+}
+
+# ─────────────────────────────────────────────────────────────
 #   MAIN ORCHESTRATOR
 # ─────────────────────────────────────────────────────────────
 function Invoke-EntraScope {
@@ -718,7 +814,7 @@ function Invoke-EntraScope {
   ███████╗██║ ╚████║   ██║   ██║  ██║██║  ██║███████║╚██████╗╚██████╔╝██║     ███████╗
   ╚══════╝╚═╝  ╚═══╝   ╚═╝   ╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝ ╚═════╝ ╚═════╝ ╚═╝     ╚══════╝
 
-  Azure & M365 Entra Penetration Testing Toolkit v1.0
+  Azure & M365 Entra Penetration Testing Toolkit v1.0-beta
   ─────────────────────────────────────────────────────────────────────────────────────
   AUTHORIZED USE ONLY. Test only environments you own or have written permission to test.
   ─────────────────────────────────────────────────────────────────────────────────────
@@ -751,10 +847,34 @@ function Invoke-EntraScope {
             Write-EntraLog "Module not found: $mp" -Level Warn
         }
     }
+    
+    # Load custom modules
+    $customModulesPath = "$PSScriptRoot\custom_modules"
+    if (Test-Path $customModulesPath) {
+        $customFiles = Get-ChildItem -Path $customModulesPath -Filter "*.ps1"
+        foreach ($cf in $customFiles) {
+            . $cf.FullName
+            Write-EntraLog "Loaded custom module: $($cf.Name)" -Level Debug
+        }
+    }
 
     # Determine which phases to run
     $phasesToRun = Get-PhasesToRun
     Write-EntraLog "Phases to run: $($phasesToRun -join ', ')" -Level Info
+
+    # Auto-Provision Test Environment
+    if (-not $SkipAutoProvision) {
+        $setupModule = Join-Path $PSScriptRoot "modules\SetupTestEnvironment.ps1"
+        if (Test-Path $setupModule) {
+            . $setupModule
+            Write-EntraLog "Auto-Provisioning Test Environment..." -Level Info
+            try {
+                $null = New-EntraScopeTestEnvironment
+            } catch {
+                Write-EntraLog "Auto-provisioning failed: $($_.Exception.Message)" -Level Error
+            }
+        }
+    }
 
     $allResults = [System.Collections.Generic.List[object]]::new()
 
@@ -767,6 +887,7 @@ function Invoke-EntraScope {
         6 = { Invoke-Phase6 }
         7 = { Invoke-Phase7 }
         8 = { Invoke-Phase8 }
+        9 = { if (Get-Command Invoke-Phase9 -ErrorAction SilentlyContinue) { Invoke-Phase9 } }
     }
 
     foreach ($phaseNum in $phasesToRun) {
@@ -782,6 +903,20 @@ function Invoke-EntraScope {
                     -Description "The phase encountered an unexpected error." `
                     -AttackTechnique "N/A" -Result $_.Exception.Message -Evidence "" -Remediation "" `
                     -MSDocsLink "" -Duration "0s"))
+            }
+        }
+    }
+
+    # Auto-Cleanup Test Environment
+    if ($script:Config.Options.CleanupAfterTest) {
+        $setupModule = Join-Path $PSScriptRoot "modules\SetupTestEnvironment.ps1"
+        if (Test-Path $setupModule) {
+            . $setupModule
+            Write-EntraLog "Auto-Cleaning Test Environment..." -Level Info
+            try {
+                $null = Remove-EntraScopeTestEnvironment
+            } catch {
+                Write-EntraLog "Auto-cleanup failed: $($_.Exception.Message)" -Level Warn
             }
         }
     }
@@ -831,4 +966,8 @@ function Invoke-EntraScope {
 }
 
 # Run
-Invoke-EntraScope
+if ($Menu -or ($PSBoundParameters.Count -eq 0)) {
+    Show-EntraScopeMenu
+} else {
+    Invoke-EntraScope
+}
